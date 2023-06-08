@@ -115,14 +115,14 @@ RemoteQueryExecutor::RemoteQueryExecutor(
     {
         const Settings & current_settings = context->getSettingsRef();
         auto timeouts = ConnectionTimeouts::getTCPTimeoutsWithFailover(current_settings);
-
+        
 #if defined(OS_LINUX)
         if (current_settings.use_hedged_requests)
         {
             std::shared_ptr<QualifiedTableName> table_to_check = nullptr;
+            LOG_TRACE(&Poco::Logger::get("HedgedConnections"), "Trying to create HedgedConnections");
             if (main_table)
                 table_to_check = std::make_shared<QualifiedTableName>(main_table.getQualifiedName());
-
             auto res = std::make_unique<HedgedConnections>(pool, context, timeouts, throttler, pool_mode, table_to_check, std::move(async_callback));
             if (extension_ && extension_->replica_info)
                 res->setReplicaInfo(*extension_->replica_info);
@@ -146,6 +146,7 @@ RemoteQueryExecutor::RemoteQueryExecutor(
             res->setReplicaInfo(*extension_->replica_info);
         return res;
     };
+    LOG_TRACE(&Poco::Logger::get("RemoteQueryExecutor"), "Constructed");
 }
 
 RemoteQueryExecutor::~RemoteQueryExecutor()
@@ -235,7 +236,8 @@ void RemoteQueryExecutor::sendQueryUnlocked(ClientInfo::QueryKind query_kind, As
 {
     if (sent_query || was_cancelled)
         return;
-
+    
+    LOG_TRACE(&Poco::Logger::get("sendQueryUnlocked"), "====Create_connection");
     connections = create_connections(async_callback);
     AsyncCallbackSetter async_callback_setter(connections.get(), async_callback);
 

@@ -82,6 +82,8 @@ public:
               const Settings * settings = nullptr,
               bool force_connected = true) override
     {
+        LOG_TRACE(&Poco::Logger::get("ConnectionPool"), "get");
+            
         Entry entry;
         if (settings)
             entry = Base::get(settings->connection_pool_max_wait_ms.totalMilliseconds());

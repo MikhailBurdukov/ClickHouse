@@ -135,7 +135,7 @@ DNSResolver::IPAddresses resolveIPAddressImpl(const std::string & host)
         if (Poco::Net::IPAddress::tryParse(host, ip))
             return DNSResolver::IPAddresses(1, ip);
     }
-
+    LOG_DEBUG(&Poco::Logger::get("resolveIPAddressImpl"), "==Resolving host : {}", host);
     DNSResolver::IPAddresses addresses = hostByName(host);
 
     return addresses;
@@ -168,7 +168,13 @@ std::unordered_set<String> reverseResolveWithCache(
 }
 
 Poco::Net::IPAddress pickAddress(const DNSResolver::IPAddresses & addresses)
-{
+{  
+    
+    for(const auto& addr : addresses){
+        LOG_DEBUG(&Poco::Logger::get("pickAddress"), "Resolving address : {}", addr.toString());
+    }
+    LOG_DEBUG(&Poco::Logger::get("addresses.front()"), "Resolving address : {}", addresses.front().toString());
+    
     return addresses.front();
 }
 

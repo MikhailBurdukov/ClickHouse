@@ -21,6 +21,7 @@ namespace ErrorCodes
 RemoteQueryExecutorReadContext::RemoteQueryExecutorReadContext(RemoteQueryExecutor & executor_, bool suspend_when_query_sent_)
     : AsyncTaskExecutor(std::make_unique<Task>(*this)), executor(executor_), suspend_when_query_sent(suspend_when_query_sent_)
 {
+    // LOG_TRACE("")
     if (-1 == pipe2(pipe_fd, O_NONBLOCK))
         throwFromErrno("Cannot create pipe", ErrorCodes::CANNOT_OPEN_FILE);
 

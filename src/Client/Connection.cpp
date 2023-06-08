@@ -36,6 +36,13 @@
 
 #include "config_version.h"
 #include "config.h"
+#include <iostream>
+
+#include <exception>
+#include <typeinfo>
+#include <stdexcept>
+
+
 
 #if USE_SSL
 #    include <Poco/Net/SecureStreamSocket.h>
@@ -94,20 +101,27 @@ void Connection::connect(const ConnectionTimeouts & timeouts)
 {
     try
     {
-        LOG_TRACE(log_wrapper.get(), "Connecting. Database: {}. User: {}{}{}",
+        LOG_TRACE(log_wrapper.get(), "Connecting. Database: {}. User: {}{}{}{}",
             default_database.empty() ? "(not specified)" : default_database,
             user,
             static_cast<bool>(secure) ? ". Secure" : "",
-            static_cast<bool>(compression) ? "" : ". Uncompressed");
+            static_cast<bool>(compression) ? "" : ". Uncompressed",
+            static_cast<bool>(async_callback) ? ". Async" : "");
 
         auto addresses = DNSResolver::instance().resolveAddressList(host, port);
         const auto & connection_timeout = static_cast<bool>(secure) ? timeouts.secure_connection_timeout : timeouts.connection_timeout;
+
+        for(const auto& x : addresses) {
+            LOG_TRACE(log_wrapper.get()," === {}", x.toString());
+        }
 
         for (auto it = addresses.begin(); it != addresses.end();)
         {
             if (connected)
                 disconnect();
 
+            LOG_TRACE(log_wrapper.get()," === trying to create socket for {}", it->toString());
+            
             if (static_cast<bool>(secure))
             {
 #if USE_SSL
@@ -127,15 +141,31 @@ void Connection::connect(const ConnectionTimeouts & timeouts)
             }
 
             try
-            {
+            {  
+            
                 if (async_callback)
                 {
+                    LOG_TRACE(log_wrapper.get()," === Nonsecured + async {}", it->toString());
+                    
                     socket->connectNB(*it);
-                    while (!socket->poll(0, Poco::Net::Socket::SELECT_READ | Poco::Net::Socket::SELECT_WRITE | Poco::Net::Socket::SELECT_ERROR))
-                        async_callback(socket->impl()->sockfd(), connection_timeout, AsyncEventTimeoutType::CONNECT, description, AsyncTaskExecutor::READ | AsyncTaskExecutor::WRITE | AsyncTaskExecutor::ERROR);
-
-                    if (auto err = socket->impl()->socketError())
+                    LOG_TRACE(log_wrapper.get()," === 1111 ");
+                    
+                    if (auto err = socket->impl()->socketError()) {
+                        LOG_TRACE(log_wrapper.get()," === Error code {}", err);
                         socket->impl()->error(err); // Throws an exception
+                    }
+
+                    while (!socket->poll(0, Poco::Net::Socket::SELECT_READ | Poco::Net::Socket::SELECT_WRITE | Poco::Net::Socket::SELECT_ERROR)){
+                        LOG_TRACE(log_wrapper.get()," === 3333 ");
+                        async_callback(socket->impl()->sockfd(), connection_timeout, AsyncEventTimeoutType::CONNECT, description, AsyncTaskExecutor::READ | AsyncTaskExecutor::WRITE | AsyncTaskExecutor::ERROR);
+                        LOG_TRACE(log_wrapper.get()," === 444 ");
+                    }
+                    LOG_TRACE(log_wrapper.get()," === 2222 ");
+                    
+                    if (auto err = socket->impl()->socketError()) {
+                        LOG_TRACE(log_wrapper.get()," === Error code {}", err);
+                        socket->impl()->error(err); // Throws an exception
+                    }
 
                     socket->setBlocking(true);
 
@@ -160,6 +190,14 @@ void Connection::connect(const ConnectionTimeouts & timeouts)
             }
             catch (Poco::TimeoutException &)
             {
+                LOG_TRACE(log_wrapper.get()," Catched TimeoutExcept {}", it->toString());
+                if (++it == addresses.end())
+                    throw;
+                continue;
+            }
+            catch (const std::exception& e)
+            {
+                LOG_TRACE(log_wrapper.get(), "Catch std::exc {}", e.what());
                 if (++it == addresses.end())
                     throw;
                 continue;
@@ -433,6 +471,7 @@ const String & Connection::getServerDisplayName(const ConnectionTimeouts & timeo
 
 void Connection::forceConnected(const ConnectionTimeouts & timeouts)
 {
+    LOG_TRACE(&Poco::Logger::get("Connection"), "forceConnected");
     if (!connected)
     {
         connect(timeouts);
@@ -502,6 +541,9 @@ bool Connection::ping(const ConnectionTimeouts & timeouts)
 TablesStatusResponse Connection::getTablesStatus(const ConnectionTimeouts & timeouts,
                                                  const TablesStatusRequest & request)
 {
+    
+    LOG_TRACE(log_wrapper.get(), "Get table status ");
+            
     if (!connected)
         connect(timeouts);
 

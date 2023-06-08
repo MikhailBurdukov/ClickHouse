@@ -28,6 +28,7 @@ HedgedConnectionsFactory::HedgedConnectionsFactory(
     std::shared_ptr<QualifiedTableName> table_to_check_)
     : pool(pool_), settings(settings_), timeouts(timeouts_), table_to_check(table_to_check_), log(&Poco::Logger::get("HedgedConnectionsFactory"))
 {
+    LOG_TRACE(&Poco::Logger::get("HedgedConnectionsFactory"), "Constructing");
     shuffled_pools = pool->getShuffledPools(settings);
     for (auto shuffled_pool : shuffled_pools)
         replicas.emplace_back(std::make_unique<ConnectionEstablisherAsync>(shuffled_pool.pool, &timeouts, settings, log, table_to_check.get()));
@@ -81,7 +82,8 @@ std::vector<Connection *> HedgedConnectionsFactory::getManyConnections(PoolMode 
     std::vector<Connection *> connections;
     connections.reserve(max_entries);
     Connection * connection = nullptr;
-
+    LOG_TRACE(&Poco::Logger::get("HedgedConnectionsFactory"), "Get many connections");
+        
     /// Try to start establishing connections with max_entries replicas.
     for (size_t i = 0; i != max_entries; ++i)
     {
@@ -100,6 +102,7 @@ std::vector<Connection *> HedgedConnectionsFactory::getManyConnections(PoolMode 
     while (connections.size() < max_entries)
     {
         /// Set blocking = true to avoid busy-waiting here.
+        LOG_TRACE(&Poco::Logger::get("HedgedConnectionsFactory"), "Waiting for connection");
         auto state = waitForReadyConnectionsImpl(/*blocking = */true, connection, async_callback);
         if (state == State::READY)
             connections.push_back(connection);
@@ -273,6 +276,7 @@ int HedgedConnectionsFactory::getReadyFileDescriptor(bool blocking, AsyncCallbac
 
 HedgedConnectionsFactory::State HedgedConnectionsFactory::resumeConnectionEstablisher(int index, Connection *& connection_out)
 {
+    LOG_TRACE(&Poco::Logger::get("HedgedConnectionsFactory"), " resumeConnectionEstablisher ");
     replicas[index].connection_establisher->resume();
 
     if (replicas[index].connection_establisher->isCancelled())

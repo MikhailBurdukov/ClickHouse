@@ -12,7 +12,6 @@
             <readonly>1</readonly>
         </readonly>
     </profiles>
-
     <!-- Users and ACL. -->
     <users>
         <!-- If user name was not specified, 'default' user is used. -->
@@ -84,6 +83,7 @@
             <!-- Quota for user. -->
             <quota>default</quota>
 
+            <!-- User can create other users and grant rights to them. -->
             <!-- User can create other users and grant rights to them. -->
             <!-- <access_management>1</access_management> -->
         </default>

@@ -1,0 +1,6 @@
+<clickhouse>
+    <!-- <listen_host>::</listen_host> -->
+    <!-- <listen_host>2001:3984:3989::1:1118</listen_host> -->
+    <!-- <listen_host>10.5.175.77</listen_host> -->
+    <listen_host>::</listen_host>
+</clickhouse>

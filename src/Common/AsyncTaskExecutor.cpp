@@ -1,5 +1,8 @@
 #include <Common/AsyncTaskExecutor.h>
-
+#include <Common/logger_useful.h>
+#include <boost/exception/all.hpp>
+#include <boost/stacktrace.hpp>
+#include <sstream>
 namespace DB
 {
 
@@ -73,8 +76,31 @@ struct AsyncTaskExecutor::Routine
 
         void operator()(int fd, Poco::Timespan timeout, AsyncEventTimeoutType type, const std::string & desc, uint32_t events)
         {
+            LOG_TRACE(&Poco::Logger::get("AsynchShit"), "===FFF Executor type: {}", typeid(executor).name());
             executor.processAsyncEvent(fd, timeout, type, desc, events);
-            fiber = std::move(fiber).resume();
+            LOG_TRACE(&Poco::Logger::get("AsynchShit"), "===FFF111111");
+            {
+                std::stringstream str; 
+                str << boost::stacktrace::stacktrace();
+                LOG_TRACE(&Poco::Logger::get("STACKTRACE"), "{}", str.str());
+            }
+            std::exception_ptr error;
+            try {
+                fiber = std::move(fiber).resume();
+            }
+            catch (const boost::context::detail::forced_unwind &)
+            {
+             
+                LOG_TRACE(&Poco::Logger::get("Exception"), "BOOST::Context!");
+                throw;
+            }
+            catch (...)
+            {
+                executor.exception = std::current_exception();
+                LOG_TRACE(&Poco::Logger::get("Exception"), "EXPT!");
+            }
+
+            LOG_TRACE(&Poco::Logger::get("AsynchShit"), "===FFF33333") ;
             executor.clearAsyncEvent();
         }
     };

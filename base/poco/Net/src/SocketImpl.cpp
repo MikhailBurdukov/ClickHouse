@@ -18,7 +18,7 @@
 #include "Poco/NumberFormatter.h"
 #include "Poco/Timestamp.h"
 #include <string.h> // FD_SET needs memset on some platforms, so we can't use <cstring>
-
+#include <iostream>
 
 #if   defined(POCO_OS_FAMILY_UNIX)
 #ifndef POCO_HAVE_FD_POLL
@@ -419,7 +419,7 @@ bool SocketImpl::pollImpl(Poco::Timespan& remainingTime, int mode)
 #if defined(POCO_HAVE_FD_POLL)
 
 	pollfd pollBuf;
-
+	// std::cout << "Here!" << std::endl;
 	memset(&pollBuf, 0, sizeof(pollfd));
 	pollBuf.fd = _sockfd;
 	if (mode & SELECT_READ) pollBuf.events |= POLLIN;

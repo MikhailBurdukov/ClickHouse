@@ -20,6 +20,7 @@ bool PacketReceiver::checkBeforeTaskResume()
 
 void PacketReceiver::processAsyncEvent(int fd [[maybe_unused]], Poco::Timespan socket_timeout, AsyncEventTimeoutType, const std::string &, uint32_t)
 {
+    
     assert(fd == socket_fd);
     timeout_descriptor.setRelative(socket_timeout);
     timeout = socket_timeout;

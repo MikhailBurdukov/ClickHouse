@@ -70,15 +70,19 @@ ColumnsDescription getStructureOfRemoteTableInShard(
     };
 
     /// Execute remote query without restrictions (because it's not real user query, but part of implementation)
+    LOG_TRACE(&Poco::Logger::get("getStructureOfRemoteTableInShard"), "====!1111");
     RemoteQueryExecutor executor(shard_info.pool, query, sample_block, new_context);
     executor.setPoolMode(PoolMode::GET_ONE);
+    LOG_TRACE(&Poco::Logger::get("getStructureOfRemoteTableInShard"), "====!22222");
+    
     if (!table_func_ptr)
         executor.setMainTable(table_id);
 
     const DataTypeFactory & data_type_factory = DataTypeFactory::instance();
 
     ParserExpression expr_parser;
-
+    
+    LOG_TRACE(&Poco::Logger::get("getStructureOfRemoteTableInShard"), "====!3333");
     while (Block current = executor.readBlock())
     {
         ColumnPtr name = current.getByName("name").column;

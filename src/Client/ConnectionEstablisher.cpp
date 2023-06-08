@@ -35,16 +35,20 @@ void ConnectionEstablisher::run(ConnectionEstablisher::TryResult & result, std::
 {
     is_finished = false;
     SCOPE_EXIT(is_finished = true);
+    LOG_TRACE(&Poco::Logger::get("ConnectionEstablisher"), "Run!");
     try
     {
+        
         ProfileEvents::increment(ProfileEvents::DistributedConnectionTries);
         result.entry = pool->get(*timeouts, settings, /* force_connected = */ false);
+        LOG_TRACE(&Poco::Logger::get("ConnectionEstablisher"), "1111!");
         AsyncCallbackSetter async_setter(&*result.entry, std::move(async_callback));
 
         UInt64 server_revision = 0;
         if (table_to_check)
             server_revision = result.entry->getServerRevision(*timeouts);
-
+        LOG_TRACE(&Poco::Logger::get("ConnectionEstablisher"), "22222!");
+        
         if (!table_to_check || server_revision < DBMS_MIN_REVISION_WITH_TABLES_STATUS)
         {
             result.entry->forceConnected(*timeouts);
@@ -53,12 +57,14 @@ void ConnectionEstablisher::run(ConnectionEstablisher::TryResult & result, std::
             result.is_up_to_date = true;
             return;
         }
-
+        LOG_TRACE(&Poco::Logger::get("ConnectionEstablisher"), "123123!");
+        
         /// Only status of the remote table corresponding to the Distributed table is taken into account.
         /// TODO: request status for joined tables also.
         TablesStatusRequest status_request;
         status_request.tables.emplace(*table_to_check);
-
+    
+        LOG_TRACE(&Poco::Logger::get("ConnectionEstablisher"), "status_response!");
         TablesStatusResponse status_response = result.entry->getTablesStatus(*timeouts, status_request);
         auto table_status_it = status_response.table_states_by_id.find(*table_to_check);
         if (table_status_it == status_response.table_states_by_id.end())
@@ -118,6 +124,7 @@ ConnectionEstablisherAsync::ConnectionEstablisherAsync(
     const QualifiedTableName * table_to_check_)
     : AsyncTaskExecutor(std::make_unique<Task>(*this)), connection_establisher(pool_, timeouts_, settings_, log_, table_to_check_)
 {
+    LOG_TRACE(&Poco::Logger::get("ConnectionEstablisherAsync"), "Constructing");
     epoll.add(timeout_descriptor.getDescriptor());
 }
 
@@ -133,10 +140,13 @@ void ConnectionEstablisherAsync::processAsyncEvent(int fd, Poco::Timespan socket
 {
     socket_fd = fd;
     socket_description = description;
+    LOG_TRACE(&Poco::Logger::get("ConnectionEstablisherAsync"), "Add to epoll fd{}, description {}", fd, description);
     epoll.add(fd, events);
     timeout_descriptor.setRelative(socket_timeout);
+    LOG_TRACE(&Poco::Logger::get("ConnectionEstablisherAsync"), "Add to epoll fd{}, description {}", fd, description);
     timeout = socket_timeout;
     timeout_type = type;
+    
 }
 
 void ConnectionEstablisherAsync::clearAsyncEvent()

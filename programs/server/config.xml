@@ -507,7 +507,6 @@
             <message>contain at least 1 special character</message>
         </rule>
     </password_complexity> -->
-
     <!-- Policy from the <storage_configuration> for the temporary files.
          If not set <tmp_path> is used, otherwise <tmp_path> is ignored.
 
