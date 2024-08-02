@@ -9,4 +9,10 @@
             </shard>
         </test_shard_localhost>
     </remote_servers>
+    <profiles>
+        <default>
+            <allow_experimental_analyzer>0</allow_experimental_analyzer>
+        </default>
+    </profiles>
+    <dictionaries_lazy_load>0</dictionaries_lazy_load>
 </clickhouse>

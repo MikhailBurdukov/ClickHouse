@@ -8,7 +8,10 @@ node1 = cluster.add_instance(
 node2 = cluster.add_instance(
     "node2",
     stay_alive=True,
+    # image="clickhouse/clickhouse-server",
+    # tag="23.8",
     main_configs=["configs/disable_lazy_load.xml", "configs/overrides.xml"],
+    dictionaries=["configs/dict.xml"]
 )
 nodes = [node1, node2]
 
@@ -17,24 +20,24 @@ nodes = [node1, node2]
 def start_cluster():
     try:
         cluster.start()
-        for node in nodes:
-            node.query("CREATE DATABASE IF NOT EXISTS test")
-            # Different internal dictionary name with Atomic
-            node.query(
-                "CREATE DATABASE IF NOT EXISTS test_ordinary ENGINE=Ordinary",
-                settings={"allow_deprecated_database_ordinary": 1},
-            )
-            node.query("CREATE DATABASE IF NOT EXISTS atest")
-            node.query("CREATE DATABASE IF NOT EXISTS ztest")
-            node.query("CREATE TABLE test.source(x UInt64, y UInt64) ENGINE=Log")
-            node.query("INSERT INTO test.source VALUES (5,6)")
+        # for node in nodes:
+        #     node.query("CREATE DATABASE IF NOT EXISTS test")
+        #     # Different internal dictionary name with Atomic
+        #     node.query(
+        #         "CREATE DATABASE IF NOT EXISTS test_ordinary ENGINE=Ordinary",
+        #         settings={"allow_deprecated_database_ordinary": 1},
+        #     )
+        #     node.query("CREATE DATABASE IF NOT EXISTS atest")
+        #     node.query("CREATE DATABASE IF NOT EXISTS ztest")
+        #     node.query("CREATE TABLE test.source(x UInt64, y UInt64) ENGINE=Log")
+        #     node.query("INSERT INTO test.source VALUES (5,6)")
 
-            for db in ("test", "test_ordinary"):
-                node.query(
-                    "CREATE DICTIONARY {}.dict(x UInt64, y UInt64) PRIMARY KEY x "
-                    "SOURCE(CLICKHOUSE(HOST 'localhost' PORT 9000 USER 'default' TABLE 'source' DB 'test')) "
-                    "LAYOUT(FLAT()) LIFETIME(0)".format(db)
-                )
+        #     for db in ("test", "test_ordinary"):
+        #         node.query(
+        #             "CREATE DICTIONARY {}.dict(x UInt64, y UInt64) PRIMARY KEY x "
+        #             "SOURCE(CLICKHOUSE(HOST 'localhost' PORT 9000 USER 'default' TABLE 'source' DB 'test')) "
+        #             "LAYOUT(FLAT()) LIFETIME(0)".format(db)
+        #         )
         yield cluster
 
     finally:
@@ -219,3 +222,19 @@ def test_no_lazy_load():
     )
 
     node2.query("drop database no_lazy")
+
+
+def test_table_with_projection():
+    node2.query("DROP DATABASE IF EXISTS test_db")
+    # node2.query("DROP DICTIONARY IF EXISTS test_dict")
+    
+    node2.query("CREATE DATABASE test_db")
+    # node2.query("CREATE TABLE test_db.dict_source( key UInt64, val UInt64) Engine=MergeTree() ORder by key")
+    # node2.query("INSERT INTO test_db.dict_source SELECT 1,1")
+    # node2.query("CREATE DICTIONARY test_dict (key UInt64, val UInt64) PRIMARY KEY key SOURCE(CLICKHOUSE(DB 'test_db' TABLE 'dict_source')) LAYOUT(FLAT()) LIFETIME(MIN 100000 MAX 1000000)")
+    # assert node2.query('SELECT name FROM system.dictionaries') == ''
+    node2.query("CREATE TABLE test_db.test_prj (x UInt64, PROJECTION prj ( SELECT x, dictGet('test_dict_xml', 'val', x%2) as dval GROUP BY x,dval)) ENGINE=MergeTree() ORDER BY x")
+
+    node2.restart_clickhouse()
+
+    node2.query("SELECT * FROM test_db.test_prj")

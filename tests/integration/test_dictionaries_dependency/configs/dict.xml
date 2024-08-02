@@ -1,0 +1,25 @@
+<clickhouse>
+    <dictionary>
+        <name>test_dict_xml</name>
+        <source>
+            <clickhouse>
+                <host>localhost</host>
+                <port>9000</port>
+                <user>default</user>
+                <password></password>
+                <db>system</db>
+                <query>select dummy, dummy + 1 from system.one</query>
+            </clickhouse>
+        </source>
+        <lifetime>5</lifetime>
+        <layout><flat /></layout>
+        <structure>
+            <id><name>key</name></id>
+            <attribute>
+                <name>val</name>
+                <type>UInt64</type>
+                <null_value>0</null_value>
+            </attribute>
+        </structure>
+    </dictionary>
+</clickhouse>
