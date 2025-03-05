@@ -194,5 +194,7 @@ endif()
 if (ENABLE_BUZZHOUSE)
     set (USE_BUZZHOUSE 1)
 endif()
+set (USE_YTSAURUS 1)
+
 
 set(SOURCE_DIR ${PROJECT_SOURCE_DIR})
