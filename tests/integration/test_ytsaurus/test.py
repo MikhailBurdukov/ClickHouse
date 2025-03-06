@@ -181,6 +181,13 @@ def test_yt_simple_table_function(started_cluster):
             "[[1,1],[1,1]]",
             id="Array_complex",
         ),
+        pytest.param(
+            "any",
+            '{"a":"hello", "38 parrots":[38]}',
+            "String",
+            '{"a":"hello","38 parrots":[38]}',
+            id="Dict",
+        ),
     ],
 )
 def test_ytsaurus_types(
