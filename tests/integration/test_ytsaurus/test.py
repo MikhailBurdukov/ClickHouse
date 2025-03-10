@@ -7,6 +7,7 @@ from helpers.cluster import ClickHouseCluster
 cluster = ClickHouseCluster(__file__)
 instance = cluster.add_instance(
     "instance",
+    user_configs=["configs/allow_experimental_ytsaurus.xml"],
     with_ytsaurus=True,
     stay_alive=True,
 )
@@ -77,6 +78,7 @@ class YTsaurusCLI:
 
 YT_HOST = "ytsaurus_backend1"
 YT_PORT = 80
+YT_DEFAULT_TOKEN = "password"
 
 
 def test_yt_simple_table_engine(started_cluster):
@@ -84,7 +86,7 @@ def test_yt_simple_table_engine(started_cluster):
     yt.create_table("//tmp/table", '{"a":"10","b":"20"}\n{"a":"20","b":"40"}')
 
     instance.query(
-        f"CREATE TABLE yt_test(a Int32, b Int32) ENGINE=Ytsaurus('{YT_HOST}:{YT_PORT}', '//tmp/table')"
+        f"CREATE TABLE yt_test(a Int32, b Int32) ENGINE=Ytsaurus('{YT_HOST}:{YT_PORT}', '//tmp/table', '{YT_DEFAULT_TOKEN}')"
     )
 
     assert instance.query("SELECT * FROM yt_test") == "10\t20\n20\t40\n"
@@ -104,25 +106,25 @@ def test_yt_simple_table_function(started_cluster):
 
     assert (
         instance.query(
-            f"SELECT * FROM ytsaurus('{YT_HOST}:{YT_HOST}','//tmp/table', 'a Int32, b Int32')"
+            f"SELECT * FROM ytsaurus('{YT_HOST}:{YT_PORT}','//tmp/table', '{YT_DEFAULT_TOKEN}','a Int32, b Int32')"
         )
         == "10\t20\n20\t40\n"
     )
     assert (
         instance.query(
-            f"SELECT a,b FROM ytsaurus('{YT_HOST}:{YT_HOST}','//tmp/table', 'a Int32, b Int32')"
+            f"SELECT a,b FROM ytsaurus('{YT_HOST}:{YT_PORT}','//tmp/table', '{YT_DEFAULT_TOKEN}', 'a Int32, b Int32')"
         )
         == "10\t20\n20\t40\n"
     )
     assert (
         instance.query(
-            f"SELECT a FROM ytsaurus('{YT_HOST}:{YT_HOST}','//tmp/table', 'a Int32, b Int32')"
+            f"SELECT a FROM ytsaurus('{YT_HOST}:{YT_PORT}','//tmp/table', '{YT_DEFAULT_TOKEN}','a Int32, b Int32')"
         )
         == "10\n20\n"
     )
     assert (
         instance.query(
-            f"SELECT * FROM ytsaurus('{YT_HOST}:{YT_HOST}','//tmp/table', 'a Int32, b Int32') WHERE a > 15"
+            f"SELECT * FROM ytsaurus('{YT_HOST}:{YT_PORT}','//tmp/table', '{YT_DEFAULT_TOKEN}','a Int32, b Int32') WHERE a > 15"
         )
         == "20\t40\n"
     )
@@ -201,8 +203,41 @@ def test_ytsaurus_types(
     yt.create_table(table_path, yt_data_json, schema={column_name: yt_data_type})
 
     instance.query(
-        f"CREATE TABLE yt_test(a {ch_column_type}) ENGINE=Ytsaurus('{YT_HOST}:{YT_PORT}', '{table_path}')"
+        f"CREATE TABLE yt_test(a {ch_column_type}) ENGINE=Ytsaurus('{YT_HOST}:{YT_PORT}', '{table_path}', '{YT_DEFAULT_TOKEN}')"
     )
     assert instance.query("SELECT a FROM yt_test") == f"{ch_data_expected}\n"
     instance.query("DROP TABLE yt_test")
+    yt.remove_table(table_path)
+
+
+def test_ytsaurus_multiple_tables(started_cluster):
+    table_path = "//tmp/table"
+    yt = YTsaurusCLI(instance, YT_HOST, YT_PORT)
+    yt.create_table(table_path, '{"a":"10","b":"20"}\n{"a":"20","b":"40"}')
+
+    instance.query("CREATE DATABASE db")
+    instance.query(
+        f"CREATE TABLE db.good(a Int32, b Int32) ENGINE=Ytsaurus('{YT_HOST}:{YT_PORT}', '//tmp/table', '{YT_DEFAULT_TOKEN}')"
+    )
+    instance.query(
+        f"CREATE TABLE db.bad(a Int32, b Int32) ENGINE=Ytsaurus('{YT_HOST}:{YT_PORT}', '//tmp/table', 'IncorrectToken')"
+    )
+
+    instance.query("SELECT * FROM db.good")
+    instance.query_and_get_error("SELECT * FROM db.bad")
+
+    instance.query(
+        f"CREATE TABLE db.good2(a Int32, b Int32) ENGINE=Ytsaurus('{YT_HOST}:{YT_PORT}', '//tmp/table', '{YT_DEFAULT_TOKEN}')"
+    )
+    instance.query("Select * from db.good2")
+
+    instance.query(
+        f"CREATE TABLE db.bad2(a Int32, b Int32) ENGINE=Ytsaurus('{YT_HOST}:{YT_PORT}', '//tmp/table', 'IncorrectToken')"
+    )
+    instance.query_and_get_error("select * from db.bad2")
+    instance.query("select * from db.good2")
+    instance.query("select * from db.good")
+    instance.query_and_get_error("select * from db.bad")
+
+    instance.query("DROP DATABASE db")
     yt.remove_table(table_path)

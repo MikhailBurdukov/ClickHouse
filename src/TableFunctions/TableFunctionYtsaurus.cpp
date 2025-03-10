@@ -1,28 +1,34 @@
 #include "config.h"
 
 #if USE_YTSAURUS
-#    include <Storages/Ytsaurus/StorageYtsaurus.h>
+#include <Storages/Ytsaurus/StorageYtsaurus.h>
 
-#    include <Common/Exception.h>
+#include <Common/Exception.h>
+#include <Core/Settings.h>
+#include <Interpreters/Context.h>
 
-#    include <Interpreters/Context.h>
+#include <Parsers/ASTFunction.h>
+#include <Parsers/ASTIdentifier.h>
 
-#    include <Parsers/ASTFunction.h>
-#    include <Parsers/ASTIdentifier.h>
-
-#    include <Interpreters/parseColumnsListForTableFunction.h>
-#    include <Storages/ColumnsDescription.h>
-#    include <Storages/checkAndGetLiteralArgument.h>
-#    include <TableFunctions/TableFunctionFactory.h>
-#    include <TableFunctions/registerTableFunctions.h>
+#include <Interpreters/parseColumnsListForTableFunction.h>
+#include <Storages/ColumnsDescription.h>
+#include <Storages/checkAndGetLiteralArgument.h>
+#include <TableFunctions/TableFunctionFactory.h>
+#include <TableFunctions/registerTableFunctions.h>
 
 namespace DB
 {
 
 namespace ErrorCodes
 {
-extern const int BAD_ARGUMENTS;
-extern const int NUMBER_OF_ARGUMENTS_DOESNT_MATCH;
+    extern const int BAD_ARGUMENTS;
+    extern const int NUMBER_OF_ARGUMENTS_DOESNT_MATCH;
+    extern const int UNKNOWN_FUNCTION;
+}
+
+namespace Setting
+{
+    extern const SettingsBool allow_experimental_ytsaurus_table_function;
 }
 
 namespace
@@ -59,6 +65,10 @@ StoragePtr TableFunctionYtsaurus::executeImpl(
     ColumnsDescription /*cached_columns*/,
     bool is_insert_query) const
 {
+    if (!context->getSettingsRef()[Setting::allow_experimental_ytsaurus_table_function])
+            throw Exception(ErrorCodes::UNKNOWN_FUNCTION, "Table function ytsaurus is experimental."
+                "Set `allow_experimental_ytsaurus_table_function` setting to enable it");
+
     auto columns = getActualTableStructure(context, is_insert_query);
     auto storage = std::make_shared<StorageYtsaurus>(
         StorageID(getDatabaseName(), table_name), std::move(*configuration), columns, ConstraintsDescription(), String{});
@@ -80,18 +90,18 @@ void TableFunctionYtsaurus::parseArguments(const ASTPtr & ast_function, ContextP
     ASTs & args = func_args.arguments->children;
 
 
-    if (args.size() == 3)
+    if (args.size() == 4)
     {
-        ASTs main_arguments(args.begin(), args.begin() + 2);
+        ASTs main_arguments(args.begin(), args.begin() + 3);
         configuration = std::make_shared<YtsaurusStorageConfiguration>(StorageYtsaurus::getConfiguration(main_arguments, context));
-        structure = checkAndGetLiteralArgument<String>(args[2], "structure");
+        structure = checkAndGetLiteralArgument<String>(args[3], "structure");
     }
     else
     {
         throw Exception(
             ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH,
-            "Table function 'ytsaurus' 3 paramaters: "
-            "ytsaurus('proxy:port', path, structure).");
+            "Table function 'ytsaurus' 4 paramaters: "
+            "ytsaurus('proxy:port', path, auth_token, structure).");
     }
 }
 
@@ -103,9 +113,9 @@ void registerTableFunctionYtsaurus(TableFunctionFactory & factory)
     {
             .documentation =
             {
-                    .description = "Allows get data from Ytsaurus collection.",
+                    .description = "Allows get data from Ytsaurus.",
                     .examples = {
-                        {"Fetch collection by URI", "SELECT * FROM ytsaurus('localhost:80', //tmp/test, 'key UInt64, data String')", ""},
+                        {"Fetch collection by URI", "SELECT * FROM ytsaurus('localhost:80', '//tmp/test', 'auth_token', 'key UInt64, data String')", ""},
                     },
                     .category = {""},
             },

@@ -26,18 +26,13 @@ const uint16_t DEFAULT_PROXY_PORT = 80;
 class YtsaurusClient : private boost::noncopyable
 {
 public:
-    struct AuthParameters
-    {
-        std::optional<String> token;
-        std::optional<std::pair<String, String>> user_with_password;
-    };
 
     struct ConnectionInfo
     {
         String proxy;
         uint16_t proxy_port = DEFAULT_PROXY_PORT;
+        String auth_token;
         String api_version = "v3";
-        AuthParameters auth{};
 
         Poco::URI getBaseUri();
     };

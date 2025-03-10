@@ -9,9 +9,6 @@
 #include <Storages/IStorage.h>
 #include <Storages/SelectQueryInfo.h>
 
-#include <mongocxx/instance.hpp>
-#include <mongocxx/client.hpp>
-
 namespace DB
 {
 
@@ -20,6 +17,7 @@ struct YtsaurusStorageConfiguration
     String host;
     uint16_t port;
     String path;
+    String auth_token;
 };
 
 /**

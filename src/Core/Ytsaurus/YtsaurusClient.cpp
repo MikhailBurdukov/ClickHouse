@@ -40,6 +40,7 @@ DB::ReadBufferPtr YtsaurusClient::execWithRetry(const YtsaurusQueryPtr query)
 
     DB::HTTPHeaderEntries http_headers{
         {"Accept", "application/json"},
+        {"Authorization", fmt::format("OAuth {}", connection_info.auth_token)},
     };
 
     /// RN i don't know how to not keep whole table in memory in general case.
