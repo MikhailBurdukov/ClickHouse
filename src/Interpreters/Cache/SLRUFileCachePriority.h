@@ -49,7 +49,7 @@ public:
         KeyMetadataPtr key_metadata,
         size_t offset,
         size_t size,
-        const UserInfo & user,
+        const OriginInfo & origin,
         const CachePriorityGuard::Lock &,
         bool is_startup = false) override;
 

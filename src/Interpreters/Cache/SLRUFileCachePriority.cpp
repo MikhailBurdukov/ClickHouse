@@ -122,7 +122,7 @@ IFileCachePriority::IteratorPtr SLRUFileCachePriority::add( /// NOLINT
     KeyMetadataPtr key_metadata,
     size_t offset,
     size_t size,
-    const UserInfo &,
+    const OriginInfo &,
     const CachePriorityGuard::Lock & lock,
     bool is_startup)
 {
@@ -422,7 +422,7 @@ void SLRUFileCachePriority::increasePriority(SLRUIterator & iterator, const Cach
         /// queue to probationary queue.
         ///
         if (!collectCandidatesForEvictionInProtected(
-                entry->size, /* elements */1, stat, eviction_candidates, nullptr, FileCache::getInternalUser().user_id, lock))
+                entry->size, /* elements */1, stat, eviction_candidates, nullptr, FileCache::getInternalOrigin().user_id, lock))
         {
             /// "downgrade" candidates cannot be moved to probationary queue,
             /// so entry cannot be moved to protected queue as well.
@@ -492,8 +492,8 @@ LRUFileCachePriority::LRUIterator SLRUFileCachePriority::addOrThrow(
 
 IFileCachePriority::PriorityDumpPtr SLRUFileCachePriority::dump(const CachePriorityGuard::Lock & lock)
 {
-    auto res = dynamic_pointer_cast<LRUFileCachePriority::LRUPriorityDump>(probationary_queue.dump(lock));
-    auto part_res = dynamic_pointer_cast<LRUFileCachePriority::LRUPriorityDump>(protected_queue.dump(lock));
+    auto res = probationary_queue.dump(lock);
+    auto part_res = protected_queue.dump(lock);
     res->merge(*part_res);
     return res;
 }

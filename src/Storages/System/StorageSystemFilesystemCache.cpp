@@ -64,7 +64,7 @@ void StorageSystemFilesystemCache::fillData(MutableColumns & res_columns, Contex
 
             const auto path = cache->getFileSegmentPath(
                 file_segment.key, file_segment.offset, file_segment.kind,
-                FileCache::UserInfo(file_segment.user_id, file_segment.user_weight));
+                FileCache::OriginInfo(file_segment.user_id, file_segment.user_weight));
             res_columns[i++]->insert(path);
             res_columns[i++]->insert(file_segment.key.toString());
             res_columns[i++]->insert(file_segment.range_left);
@@ -85,7 +85,7 @@ void StorageSystemFilesystemCache::fillData(MutableColumns & res_columns, Contex
                 res_columns[i++]->insert(size);
             else
                 res_columns[i++]->insertDefault();
-        }, FileCache::getCommonUser().user_id);
+        }, FileCache::getCommonOrigin().user_id);
     }
 }
 
