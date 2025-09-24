@@ -2,9 +2,9 @@
 #include <cctype>
 #include <Interpreters/Cache/FileCache_fwd.h>
 #include <Interpreters/Cache/FileCacheKey.h>
-#include <time.h>
 #include <boost/algorithm/string/case_conv.hpp>
 #include <base/EnumReflection.h>
+#include <Interpreters/Cache/FileCacheOriginInfo.h>
 
 namespace DB
 {
@@ -69,20 +69,6 @@ namespace DB
         SplitCache_System,
     };
 
-    enum class FileSegmentKeyType : uint8_t
-    {
-        General = 0,
-        System, // Segment for (metadata, index, marks, etc.)
-        Data, // Segment for table data
-    };
-
-    inline String getKeyTypePrefix(FileSegmentKeyType type)
-    {
-        if (type == FileSegmentKeyType::General)
-            return "";
-        return String(magic_enum::enum_name(type));
-    }
-
     std::string toString(FileSegmentKind kind);
 
     struct FileSegmentInfo
@@ -101,7 +87,6 @@ namespace DB
         uint64_t references;
         bool is_unbound;
         FileCacheQueueEntryType queue_entry_type;
-        std::string user_id;
-        uint64_t user_weight;
+        FileCacheOriginInfo origin;
     };
 }

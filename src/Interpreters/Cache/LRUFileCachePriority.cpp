@@ -270,7 +270,7 @@ bool LRUFileCachePriority::collectCandidatesForEviction(
     FileCacheReserveStat & stat,
     EvictionCandidates & res,
     IFileCachePriority::IteratorPtr /* reservee */,
-    const UserID &,
+    const OriginInfo &,
     const CachePriorityGuard::Lock & lock)
 {
     if (canFit(size, elements, 0, 0, lock))

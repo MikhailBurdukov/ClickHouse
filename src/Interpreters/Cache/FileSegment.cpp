@@ -1068,8 +1068,7 @@ FileSegment::Info FileSegment::getInfo(const FileSegmentPtr & file_segment)
         .references = static_cast<uint64_t>(file_segment.use_count()),
         .is_unbound = file_segment->is_unbound,
         .queue_entry_type = file_segment->queue_iterator ? file_segment->queue_iterator->getType() : QueueEntryType::None,
-        .user_id = key_metadata->origin.user_id,
-        .user_weight = key_metadata->origin.weight.value(),
+        .origin = key_metadata->origin,
     };
 }
 

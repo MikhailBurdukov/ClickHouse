@@ -59,7 +59,7 @@ public:
         FileCacheReserveStat & stat,
         EvictionCandidates & res,
         IFileCachePriority::IteratorPtr reservee,
-        const UserID & user_id,
+        const OriginInfo & origin,
         const CachePriorityGuard::Lock &) override;
 
     CollectStatus collectCandidatesForEviction(
@@ -104,7 +104,7 @@ private:
         FileCacheReserveStat & stat,
         EvictionCandidates & res,
         IFileCachePriority::IteratorPtr reservee,
-        const UserID & user_id,
+        const OriginInfo & origin,
         const CachePriorityGuard::Lock & lock);
 
     LRUFileCachePriority::LRUIterator addOrThrow(

@@ -512,8 +512,7 @@ BlockIO InterpreterSystemQuery::execute()
                 {
                     size_t i = 0;
                     const auto path = cache->getFileSegmentPath(
-                        file_segment.key, file_segment.offset, file_segment.kind,
-                        FileCache::OriginInfo(file_segment.user_id, file_segment.user_weight));
+                        file_segment.key, file_segment.offset, file_segment.kind, file_segment.origin);
                     res_columns[i++]->insert(cache_name);
                     res_columns[i++]->insert(path);
                     res_columns[i++]->insert(file_segment.downloaded_size);

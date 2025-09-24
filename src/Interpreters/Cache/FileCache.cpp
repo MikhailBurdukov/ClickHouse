@@ -26,6 +26,7 @@
 #include <mutex>
 #include <tuple>
 #include <vector>
+#include <Interpreters/Cache/FileSegmentInfo.h>
 
 
 namespace fs = std::filesystem;
@@ -192,8 +193,19 @@ FileCache::FileCache(const std::string & cache_name, const FileCacheSettings & s
 
 const FileCache::OriginInfo & FileCache::getCommonOrigin()
 {
-    static OriginInfo user(getCommonUserID(), 0);
-    return user;
+    static OriginInfo origin(getCommonUserID(), 0, FileSegmentKeyType::General);
+    return origin;
+}
+
+FileCache::OriginInfo FileCache::getCommonOriginWithSegmentKeyType(const fs::path& filename) const
+{
+    auto origin = FileCache::getCommonOrigin();
+    if (!use_split_cache)
+        return origin;
+
+    static std::array<std::string, 5> system_cache_type = {".txt", ".json", ".idx", ".cidx", ".dat"};
+    origin.segment_type = std::find(system_cache_type.begin(), system_cache_type.end(), fs::path(filename).extension()) != system_cache_type.end() ? FileSegmentKeyType::Data : FileSegmentKeyType::System;
+    return origin;
 }
 
 const FileCache::OriginInfo & FileCache::getInternalOrigin()
@@ -1050,7 +1062,7 @@ bool FileCache::tryReserve(
     if (query_priority)
     {
         if (!query_priority->collectCandidatesForEviction(
-                size, required_elements_num, reserve_stat, eviction_candidates, {}, origin.user_id, cache_lock))
+                size, required_elements_num, reserve_stat, eviction_candidates, {}, origin, cache_lock))
         {
             const auto & stat = reserve_stat.total_stat;
             failure_reason = fmt::format(
@@ -1071,7 +1083,7 @@ bool FileCache::tryReserve(
     }
 
     if (!main_priority->collectCandidatesForEviction(
-            size, required_elements_num, reserve_stat, eviction_candidates, queue_iterator, origin.user_id, cache_lock))
+            size, required_elements_num, reserve_stat, eviction_candidates, queue_iterator, origin, cache_lock))
     {
         const auto & stat = reserve_stat.total_stat;
         failure_reason = fmt::format(
@@ -1640,7 +1652,8 @@ void FileCache::loadMetadataForKeys(const fs::path & keys_dir)
         if (!need_to_load)
             continue;
         auto data_key = keys_dir;
-        data_key.append(getKeyTypePrefix(FileSegmentKeyType::Data));
+        data_key.append(getKeyTypePrefix(type));
+        // LOG_DEBUG(log, "Load cache from {}", data_key);
         if (fs::exists(data_key))
         {
             origin_tmp.segment_type = type;

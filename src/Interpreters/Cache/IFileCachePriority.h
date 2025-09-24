@@ -163,7 +163,7 @@ public:
         FileCacheReserveStat & stat,
         EvictionCandidates & res,
         IteratorPtr reservee,
-        const UserID & user_id,
+        const OriginInfo & origin,
         const CachePriorityGuard::Lock &) = 0;
 
     /// Collect eviction candidates sufficient to have `desired_size`

@@ -141,13 +141,13 @@ bool SplitFileCachePriority::collectCandidatesForEviction(
     FileCacheReserveStat & stat,
     EvictionCandidates & res,
     IFileCachePriority::IteratorPtr reservee,
-    const UserID & user_id,
+    const OriginInfo & origin,
     const CachePriorityGuard::Lock & lock)
 {
     
-    auto * split_iterator = assert_cast<SplitIterator *>(reservee.get());
+    // auto * split_iterator = assert_cast<SplitIterator *>(reservee.get());
 
-    bool success = priorities_holder.at(split_iterator->type)->collectCandidatesForEviction(size, elements, stat, res, reservee, user_id, lock);
+    bool success = priorities_holder.at(origin.segment_type)->collectCandidatesForEviction(size, elements, stat, res, reservee, origin, lock);
     // Don't know yet is is needed or not;
     // if (success && res.size() > 0)
     // {
