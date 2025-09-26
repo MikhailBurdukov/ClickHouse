@@ -46,8 +46,8 @@ public:
         size_t size,
         size_t elements,
         const CachePriorityGuard::Lock &,
-        IteratorPtr reservee = nullptr,
-        bool best_effort = false) const override;
+        IteratorPtr,
+        bool) const override;
 
     IteratorPtr add( /// NOLINT
         KeyMetadataPtr key_metadata,

@@ -209,16 +209,17 @@ String CacheMetadata::getFileSegmentPath(
     FileSegmentKind segment_kind,
     const OriginInfo & origin) const
 {
-    return fs::path(fs::path(getKeyTypePrefix(origin.segment_type)) / getKeyPath(key, origin)) / getFileNameForFileSegment(offset, segment_kind);
+    return  fs::path(getKeyPath(key, origin)) / getFileNameForFileSegment(offset, segment_kind);
 }
 
 String CacheMetadata::getKeyPath(const Key & key, const OriginInfo & origin) const
 {
     const auto key_str = key.toString();
+    const auto key_type_prefix = getKeyTypePrefix(origin.segment_type);
     if (write_cache_per_user_directory)
-        return fs::path(path) / fmt::format("{}.{}", origin.user_id, origin.weight.value()) / key_str.substr(0, 3) / key_str;
+        return fs::path(path) / key_type_prefix / fmt::format("{}.{}", origin.user_id, origin.weight.value()) / key_str.substr(0, 3) / key_str;
 
-    return fs::path(path) / key_str.substr(0, 3) / key_str;
+    return fs::path(path) / key_type_prefix / key_str.substr(0, 3) / key_str;
 }
 
 CacheMetadataGuard::Lock CacheMetadata::MetadataBucket::lock() const
