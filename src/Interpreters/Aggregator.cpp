@@ -32,6 +32,7 @@
 #include <Parsers/ASTSelectQuery.h>
 #include <base/sort.h>
 #include <Common/CurrentMetrics.h>
+#include <Common/CurrentMemoryTracker.h>
 #include <Common/CurrentThread.h>
 #include <Common/JSONBuilder.h>
 #include <Common/MemoryTracker.h>
@@ -3884,6 +3885,10 @@ Block Aggregator::mergeBlocks(BlocksList & blocks, bool final, std::atomic<bool>
     #undef M
         else if (result.type != AggregatedDataVariants::Type::without_key)
             throw Exception(ErrorCodes::UNKNOWN_AGGREGATED_DATA_VARIANT, "Unknown aggregated data variant.");
+
+        CurrentMemoryTracker::check();
+        auto stat = CurrentMemoryTracker::getStat();
+        LOG_TRACE(log, "Tracker amount {} RSS {} hardlimit {} softlimit {}", stat.amount, stat.rss, stat.hard_limit, stat.soft_limit);
     }
 
     Block block;

@@ -74,7 +74,6 @@ AllocationTrace CurrentMemoryTracker::allocImpl(Int64 size, bool throw_if_memory
         {
             Int64 current_untracked_memory = current_thread->untracked_memory;
             current_thread->untracked_memory = 0;
-
             try
             {
                 return memory_tracker->allocImpl(current_untracked_memory, throw_if_memory_exceeded);
@@ -142,4 +141,18 @@ void CurrentMemoryTracker::injectFault()
 {
     if (auto * memory_tracker = getMemoryTracker())
         memory_tracker->injectFault();
+}
+
+CurrentMemoryTracker::Stat CurrentMemoryTracker::getStat()
+{
+    if (auto * memory_tracker = getMemoryTracker())
+    {
+        CurrentMemoryTracker::Stat stat;
+        stat.amount = memory_tracker->get();
+        stat.rss = memory_tracker->getRSS();
+        stat.hard_limit = memory_tracker->getHardLimit();
+        stat.soft_limit = memory_tracker->getSoftLimit();
+        return stat;
+    }
+    return CurrentMemoryTracker::Stat{.rss=-1, .hard_limit = -1};
 }
