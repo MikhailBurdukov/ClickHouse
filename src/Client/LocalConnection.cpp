@@ -504,12 +504,28 @@ void LocalConnection::sendData(const Block & block, const String &, bool)
     if (block.empty())
         return;
 
-    if (state->pushing_async_executor)
-        state->pushing_async_executor->push(block);
-    else if (state->pushing_executor)
-        state->pushing_executor->push(block);
-    else
+    /// A previous block has already failed; the exception awaits delivery to the client, do not feed the pipeline further.
+    if (state->exception)
+        return;
+
+    if (!state->pushing_async_executor && !state->pushing_executor)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Unknown executor");
+
+    try
+    {
+        if (state->pushing_async_executor)
+            state->pushing_async_executor->push(block);
+        else
+            state->pushing_executor->push(block);
+    }
+    catch (...) // Ok: wrap the exception for the client; `push` can rethrow an exception from a sink
+    {
+        captureCurrentException();
+        /// Make the failure visible to the client's `checkPacket` right away so that it stops sending data.
+        /// `poll` flushes the buffered logs first and then schedules the `Exception` packet.
+        poll(0);
+        return;
+    }
 
     if (send_profile_events)
         sendProfileEvents();

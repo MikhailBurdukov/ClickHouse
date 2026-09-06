@@ -1900,17 +1900,16 @@ def test_query_passing_engine(started_cluster):
     conn.close()
 
 
-def clickhouse_local_error(query):
+def clickhouse_local_error(query, stdin=None):
     # `clickhouse local` prints the error to stderr, while `exec_in_container` returns
     # only stdout, so redirect stderr to stdout to capture the error message.
-    return node1.exec_in_container(
-        [
-            "bash",
-            "-c",
-            f"clickhouse local --send_logs_level=fatal --query {shlex.quote(query)} 2>&1",
-        ],
-        nothrow=True,
+    # `stdin`, when given, is fed to the query as the data of an `INSERT ... FORMAT`.
+    command = (
+        f"clickhouse local --send_logs_level=fatal --query {shlex.quote(query)} 2>&1"
     )
+    if stdin is not None:
+        command = f"printf %s {shlex.quote(stdin)} | {command}"
+    return node1.exec_in_container(["bash", "-c", command], nothrow=True)
 
 
 def test_clickhouse_local_preserves_mysql_error_messages(started_cluster):
@@ -1952,6 +1951,18 @@ def test_clickhouse_local_preserves_mysql_error_messages(started_cluster):
 
         assert "Duplicate entry '1'" in write_error
         assert "POCO_EXCEPTION" in write_error
+
+        # Data fed by the client (stdin, `INSERT ... FORMAT`) goes through `LocalConnection::sendData`,
+        # a different path than `INSERT ... SELECT`; the sink error must be reported the same way.
+        stdin_write_error = clickhouse_local_error(
+            f"INSERT INTO FUNCTION mysql('mysql80:3306', 'clickhouse', '{table_name}', 'root', '{mysql_pass}') FORMAT TSV",
+            stdin="1\n",
+        )
+
+        assert "Duplicate entry '1'" in stdin_write_error
+        assert "POCO_EXCEPTION" in stdin_write_error
+        # The error must come through the local protocol path exactly once, not be re-wrapped by the client.
+        assert stdin_write_error.count("DB::Exception") == 1
     finally:
         drop_mysql_table(conn, table_name)
         conn.close()
