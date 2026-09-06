@@ -883,6 +883,10 @@ FROM
     SELECT [NULL]                   AS arr
 ) ORDER BY tuple(); -- { serverError ILLEGAL_COLUMN }
 
+SELECT arrayElementOrNull(
+    materialize([(1, 'a'), (2, 'b')]),
+    toUInt64(18446744073709551615));
+
 
 SELECT arrayElementOrNull(arr, idx)
 FROM
