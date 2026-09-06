@@ -37,6 +37,7 @@ https://github.com/ClickHouse/internal-knowledge-base/issues/452
 import argparse
 import logging
 import os
+import shlex
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -1533,17 +1534,38 @@ def parse_args():
         action="store_true",
         help="add debug logging for git_helper and github_helper",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--loop", action="store_true", help="repeat within one checkout"
+    )
+    parser.add_argument(
+        "--loop-duration",
+        type=int,
+        default=170 * 60,
+        help="stop starting iterations after this many seconds",
+    )
+    parser.add_argument(
+        "--interval",
+        type=int,
+        default=20 * 60,
+        help="seconds between iteration starts",
+    )
+    parser.add_argument(
+        "--max-consecutive-failures",
+        type=int,
+        default=3,
+        help="stop the loop after this many consecutive failures",
+    )
+    args = parser.parse_args()
+    for option in ("loop_duration", "interval", "max_consecutive_failures"):
+        if getattr(args, option) <= 0:
+            parser.error(f"--{option.replace('_', '-')} must be positive")
+    return args
 
 
-def main():
+def run_once(args):
     temp_path = Path(TEMP_PATH)
     temp_path.mkdir(parents=True, exist_ok=True)
 
-    args = parse_args()
-    if args.debug_helpers:
-        logging.getLogger("github_helper").setLevel(logging.DEBUG)
-        logging.getLogger("git_helper").setLevel(logging.DEBUG)
     token = args.token or get_best_robot_token()
 
     gh = GitHub(token)
@@ -1577,24 +1599,104 @@ def main():
         )
 
 
+def check_git_version() -> None:
+    version = git_runner("git --version").split()[2]
+    if tuple(int(part) for part in version.split(".")[:2]) < (2, 38):
+        raise BackportException(
+            f"Git 2.38 or newer is required for cherry-pick retries; found {version}. "
+            "Upgrade the runner image before running backport automation."
+        )
+
+
+def local_branches() -> set:
+    return set(
+        git_runner(
+            "git for-each-ref --format='%(refname:short)' refs/heads"
+        ).splitlines()
+    )
+
+
+def restore_checkout(initial_sha: str, initial_branches: set) -> None:
+    # Keep the selected code for every iteration, including manual branch runs.
+    git_runner(f"{GIT_PREFIX} checkout --detach -f {initial_sha}")
+    for branch in sorted(local_branches() - initial_branches):
+        if branch.startswith(("backport/", "cherrypick/")):
+            logging.info("Deleting temporary local branch %s", branch)
+            git_runner(f"git branch -D -- {shlex.quote(branch)}")
+
+
+def run_loop(args) -> None:
+    initial_sha = git_runner("git rev-parse HEAD")
+    initial_branches = local_branches()
+    deadline = time.monotonic() + args.loop_duration
+    iterations = 0
+    failures = 0
+    consecutive_failures = 0
+    last_error = None  # type: Optional[Exception]
+
+    while True:
+        started = time.monotonic()
+        if args.loop and started >= deadline:
+            break
+        iterations += 1
+        logging.info("Starting backport iteration %s at %s", iterations, initial_sha)
+        try:
+            # Recreate clients and refresh credentials and repository state each pass.
+            run_once(args)
+        except Exception as e:
+            failures += 1
+            consecutive_failures += 1
+            last_error = e
+            logging.exception("Backport iteration %s failed", iterations)
+            recover_git_state()
+            if IS_CI and not args.dry_run:
+                CIBuddy().post_job_error(
+                    f"The backport process finished with errors: {e}",
+                    with_instance_info=True,
+                    with_wf_link=True,
+                    critical=True,
+                )
+        else:
+            consecutive_failures = 0
+        finally:
+            # Failure to restore a usable checkout aborts the loop as well.
+            restore_checkout(initial_sha, initial_branches)
+
+        if not args.loop or consecutive_failures >= args.max_consecutive_failures:
+            break
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        delay = min(max(0, args.interval - (time.monotonic() - started)), remaining)
+        if delay > 0:
+            time.sleep(delay)
+
+    summary = f"Ran {iterations} iteration(s), {failures} failed"
+    logging.info(summary)
+    if IS_CI and os.getenv("GITHUB_STEP_SUMMARY"):
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as output:
+            output.write(summary + "\n")
+    if failures:
+        raise BackportException(summary) from last_error
+
+
+def main():
+    args = parse_args()
+    if args.debug_helpers:
+        logging.getLogger("github_helper").setLevel(logging.DEBUG)
+        logging.getLogger("git_helper").setLevel(logging.DEBUG)
+    # Check prerequisites before fetching credentials or making API mutations.
+    check_git_version()
+    if is_shallow():
+        raise BackportException("Backport automation requires a complete Git checkout")
+    with stash():
+        if os.getenv("ROBOT_CLICKHOUSE_SSH_KEY", ""):
+            with SSHKey("ROBOT_CLICKHOUSE_SSH_KEY"):
+                run_loop(args)
+        else:
+            run_loop(args)
+
+
 if __name__ == "__main__":
     logging.getLogger().setLevel(level=logging.INFO)
-
-    assert not is_shallow()
-    try:
-        with stash():
-            if os.getenv("ROBOT_CLICKHOUSE_SSH_KEY", ""):
-                with SSHKey("ROBOT_CLICKHOUSE_SSH_KEY"):
-                    main()
-            else:
-                main()
-
-    except Exception as e:
-        if IS_CI:
-            ci_buddy = CIBuddy()
-            ci_buddy.post_job_error(
-                f"The backport process finished with errors: {e}",
-                with_instance_info=True,
-                with_wf_link=True,
-                critical=True,
-            )
+    main()
