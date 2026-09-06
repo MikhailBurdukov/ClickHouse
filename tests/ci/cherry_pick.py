@@ -1566,7 +1566,7 @@ def run_once(args):
     temp_path = Path(TEMP_PATH)
     temp_path.mkdir(parents=True, exist_ok=True)
 
-    token = args.token or get_best_robot_token()
+    token = args.token or get_best_robot_token(refresh=True)
 
     gh = GitHub(token)
     temp_path = Path(TEMP_PATH)
