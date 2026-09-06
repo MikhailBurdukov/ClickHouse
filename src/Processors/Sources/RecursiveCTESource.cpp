@@ -216,27 +216,22 @@ private:
         /// block, so without squashing a step that produces many small chunks leaves many tiny
         /// blocks behind and the read of the next step degrades.
         ///
-        /// The thresholds follow the same policy as a regular `INSERT` into the same storage. Today the
-        /// intermediate table is always a `Memory` table, which prefers smaller blocks for cache
-        /// locality, so squashing accumulates only up to `max_block_size` rows before flushing; the
-        /// `prefersLargeBlocks` branch keeps the policy in sync with `INSERT` should the storage of the
-        /// intermediate table ever change. The upper bounds are enforced only with
-        /// `use_strict_insert_block_limits`, as for `INSERT`.
-        const bool prefers_large_blocks = intermediate_temporary_table_storage->prefersLargeBlocks();
-        const size_t squashing_min_block_size_rows = prefers_large_blocks
+        /// The settings for the thresholds are modeled after the corresponding settings for INSERT.
+        bool prefers_large_blocks = intermediate_temporary_table_storage->prefersLargeBlocks();
+        size_t squashing_min_block_size_rows = prefers_large_blocks
             ? recursive_subquery_settings[Setting::min_insert_block_size_rows]
             : recursive_subquery_settings[Setting::max_block_size];
-        const size_t squashing_min_block_size_bytes
-            = prefers_large_blocks ? recursive_subquery_settings[Setting::min_insert_block_size_bytes] : 0;
+        size_t squashing_min_block_size_bytes = prefers_large_blocks
+            ? recursive_subquery_settings[Setting::min_insert_block_size_bytes]
+            : 0;
 
-        /// The sink below is single-stream anyway (`addChain` resizes the pipeline to one stream), so
-        /// squash on a single stream too: otherwise each of the parallel streams reading the working
-        /// table would squash its own chunks and leave its own under-filled tail block behind.
+        /// `addChain` below resizes to a single-stream anyway, so squash to a single stream here too.
+        /// If we wouldn't do that then each of the parallel streams reading the working
+        /// table would only squash their own chunks.
         pipeline_builder.resize(1);
         pipeline_builder.addSimpleTransform([&](const SharedHeader & in_header, QueryPipelineBuilder::StreamType stream_type) -> ProcessorPtr
         {
-            /// The totals and extremes streams are dropped by the sink below; `SquashingTransform` does not
-            /// tolerate a finished output port, so it must not be attached to them.
+            /// Totals and extremes are dropped by the sink below anyways
             if (stream_type != QueryPipelineBuilder::StreamType::Main)
                 return nullptr;
 
