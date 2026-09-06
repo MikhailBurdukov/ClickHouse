@@ -4,7 +4,7 @@
 -- that is not equivalent: `if` sends a NULL condition down the else branch, so the row contributes
 -- `x`, while `not(NULL)` is NULL and `aggIf` skips the row.
 
-SET optimize_rewrite_aggregate_function_with_if = 1, optimize_rewrite_sum_if_to_count_if = 0;
+SET enable_analyzer = 1, optimize_rewrite_aggregate_function_with_if = 1, optimize_rewrite_sum_if_to_count_if = 0;
 
 DROP TABLE IF EXISTS t_agg_if_nullable_cond;
 CREATE TABLE t_agg_if_nullable_cond (c Nullable(UInt8), x Int64) ENGINE = Memory;
@@ -34,7 +34,6 @@ DROP TABLE IF EXISTS t_agg_if_plain_cond;
 CREATE TABLE t_agg_if_plain_cond (c UInt8, x Int64) ENGINE = Memory;
 INSERT INTO t_agg_if_plain_cond VALUES (1, 100), (0, 10);
 SELECT sum(if(c, 0, x)) FROM t_agg_if_plain_cond;
-SET enable_analyzer = 1;
 SELECT count() > 0 FROM (EXPLAIN QUERY TREE SELECT sum(if(c, 0, x)) FROM t_agg_if_plain_cond) WHERE explain LIKE '%sumIf%';
 
 DROP TABLE t_agg_if_nullable_cond;
