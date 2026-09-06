@@ -1,8 +1,4 @@
 <test>
-    <!-- The recursive term reads the working table block by block and writes one block per chunk it
-         produces. A fragmented frontier, here produced by a selective filter over a wide scan, would
-         otherwise stay fragmented on every step: thousands of blocks of a few rows each, and the same
-         number of chunks to process per step. -->
     <settings>
         <enable_analyzer>1</enable_analyzer>
     </settings>
