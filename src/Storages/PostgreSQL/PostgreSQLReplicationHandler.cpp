@@ -700,7 +700,9 @@ StorageInfo PostgreSQLReplicationHandler::loadFromSnapshot(postgres::Connection 
 {
     auto tx = std::make_shared<pqxx::ReplicationTransaction>(connection.getRef());
 
-    std::string query_str = fmt::format("SET TRANSACTION SNAPSHOT '{}'", snapshot_name);
+    /// Not always PostgreSQL's own snapshot id from `CREATE_REPLICATION_SLOT`: with a user-managed
+    /// slot it is `materialized_postgresql_snapshot` verbatim, so it has to be sent as data.
+    std::string query_str = fmt::format("SET TRANSACTION SNAPSHOT {}", quoteStringPostgreSQL(snapshot_name));
     tx->exec(query_str);
 
     PostgreSQLTableStructurePtr table_structure;
