@@ -1575,7 +1575,7 @@ def test_nats_jet_stream_direct_select_resumes_after_skipped_broken_message(nats
     # the count stays at two and the skipped message stays outstanding until the ACK deadline.
     #
     # The ACK deadline is far beyond every wait below, so a redelivery can only come from the
-    # recovery handing the message back, which makes the broker's delivery counter the oracle.
+    # recovery handing the message back, which makes the broker's own counters the oracle.
     asyncio.run(add_durable_consumer(cluster, "test_stream", "test_consumer", ack_wait_sec = 600))
 
     instance.query(
@@ -1613,28 +1613,14 @@ def test_nats_jet_stream_direct_select_resumes_after_skipped_broken_message(nats
     asyncio.run(publish_messages(cluster, "test_stream", "test_subject", [json.dumps({"key": 42, "value": 42})]))
     assert TSV(select.get_answer()) == TSV("42")
 
-    # Only the hard kill can be measured here, for the reason the sibling test states: it answers
-    # nothing on its way out, so the hand-back reaches a live broker and its redelivery is the third
-    # delivery below. A graceful shutdown answers the parked pull request as it exits, so the
-    # recovery NAKs into a connection whose JetStream side is already going down, and a NAK is a
-    # fire-and-forget publish whose status the client discards - when it is dropped the broker never
-    # redelivers and the count stays at two.
-    if kill is nats_helpers.hard_kill_nats:
-        # Three deliveries for two messages: the recovery handed the skipped message back instead of
-        # committing it on behalf of a query that had returned nothing yet, and the redelivery was
-        # skipped again straight away. Two would mean it was consumed before the query committed
-        # anything, which is what a cancelled query must not leave behind.
-        deadline = time.monotonic() + 60
-        consumer_seq = 0
-        while time.monotonic() < deadline:
-            consumer_seq = asyncio.run(get_delivered_consumer_seq(cluster, "test_stream", "test_consumer"))
-            if consumer_seq >= 3:
-                break
-            time.sleep(0.2)
-
-        assert consumer_seq >= 3, (
-            "the recovery acknowledged the skipped message before the query committed anything: "
-            "{} deliveries for two messages".format(consumer_seq))
+    # The query returned a row, so it committed what it read, and the message it passed over is not
+    # part of that: the recovery had to hand it back to the broker rather than commit it on behalf of
+    # a query that had returned nothing yet, which is what a cancelled query must not leave behind.
+    # A graceful shutdown answers the parked pull request as it exits, so there the recovery publishes
+    # into a connection whose JetStream side is already going down and the hand-back can be dropped;
+    # a hard kill answers nothing, so its recovery reaches a live broker.
+    _wait_for_the_skipped_message_not_to_be_committed(
+        hand_back_may_be_lost = kill is not nats_helpers.hard_kill_nats)
 
     # The query did commit, so the row it returned is consumed by the time it returns, and so is the
     # skipped message where its redelivery reached the query before that row did. It does not have
@@ -1643,6 +1629,32 @@ def test_nats_jet_stream_direct_select_resumes_after_skipped_broken_message(nats
     # it outstanding until the ACK deadline with nothing left to pull it. What must hold is that the
     # only thing the broker may still count as outstanding is that skipped message, never the row.
     _wait_for_nothing_but_the_first_message_outstanding()
+
+
+def _wait_for_the_skipped_message_not_to_be_committed(
+        hand_back_may_be_lost, consumer_name = "test_consumer", time_limit_sec = 60):
+    # A hand-back is a NAK, which the broker redelivers at once, so a third delivery for two messages
+    # is the skipped message going back and being skipped again. Where that NAK can be dropped there
+    # is no third delivery, and then what the broker holds is what says the message was not
+    # committed: a NAK it never saw leaves the message delivered and unacknowledged, so it is the one
+    # message outstanding with the acknowledgement floor still below it, while a commit moves that
+    # floor past it and so reaches neither state.
+    deadline = time.monotonic() + time_limit_sec
+    info = None
+    while time.monotonic() < deadline:
+        info = asyncio.run(get_consumer_info(cluster, "test_stream", consumer_name))
+        if info.delivered.consumer_seq >= 3:
+            return
+        if hand_back_may_be_lost and info.num_ack_pending == 1 and info.ack_floor.stream_seq == 0:
+            logging.debug("the hand-back did not reach the broker: {} deliveries, {} outstanding".format(
+                info.delivered.consumer_seq, info.num_ack_pending))
+            return
+        time.sleep(0.2)
+
+    raise AssertionError(
+        "the recovery acknowledged the skipped message before the query committed anything: "
+        "{} deliveries for two messages, {} outstanding, acknowledgement floor {}".format(
+            info.delivered.consumer_seq, info.num_ack_pending, info.ack_floor.stream_seq))
 
 
 def _wait_for_nothing_but_the_first_message_outstanding(consumer_name = "test_consumer", time_limit_sec = 60):
