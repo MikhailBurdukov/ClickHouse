@@ -56,7 +56,13 @@ def refresh():
         if ref.startswith("refs/heads/"):
             branch = ref[len("refs/heads/") :]
     if not branch:
-        print("loom code.refresh: no pushed branch in event - skipped")
+        # Both consuming workflows are branch-only push workflows, so this is
+        # never an expected tag case: the payload was unreadable or the
+        # trigger drifted. Surface it, or the index goes stale in silence.
+        info.add_workflow_warning(
+            "loom code.refresh: no pushed branch in GITHUB_EVENT_PATH"
+            f" [{event_path or 'unset'}] - skipped"
+        )
         return
 
     # org/namespace are REQUIRED in the body: the token is
