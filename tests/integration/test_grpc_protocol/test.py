@@ -818,6 +818,68 @@ def test_stream_input_left_open_by_many_concurrent_clients():
     assert query("SELECT 3") == "3\n"
 
 
+def wait_for_no_grpc_call_threads(timeout=60):
+    # A `gRPCServerCall` thread exists only while a call is being handled: the global thread pool
+    # renames its worker back to the default as soon as the call's function returns. So a thread
+    # still carrying that name long after every call has been cancelled means the server hung in
+    # the teardown of a call.
+    deadline = time.time() + timeout
+    while True:
+        count = node.query(
+            "SELECT count() FROM system.stack_trace WHERE thread_name = 'gRPCServerCall'"
+        ).strip()
+        if count == "0":
+            return
+        if time.time() >= deadline:
+            traces = node.query(
+                "SELECT thread_id, arrayStringConcat(arrayMap(x -> demangle(addressToSymbol(x)), trace), '\n') "
+                "FROM system.stack_trace WHERE thread_name = 'gRPCServerCall' "
+                "SETTINGS allow_introspection_functions = 1"
+            )
+            raise AssertionError(
+                f"{count} gRPC call thread(s) did not finish:\n{traces}"
+            )
+        time.sleep(0.5)
+
+
+def test_stream_io_client_cancelled_while_input_left_open():
+    # The teardown path the other tests do not reach: here the call is destroyed *before* the
+    # response stream has been finished, so `close()` runs with `responder_finished == false`.
+    # The client cancels while it still has the request stream open, so the server's write of the
+    # next output block fails, the query fails with `NETWORK_ERROR` and sending the exception
+    # fails too - and the speculative read of the next `QueryInfo` can still be armed at that
+    # moment. Nothing would ever complete that read on its own, so `close()` has to cancel the
+    # call first; otherwise it would wait for the read forever and leak the call thread.
+    stub = clickhouse_grpc_pb2_grpc.ClickHouseStub(main_channel)
+
+    def make_send_query_info(keep_open):
+        def send_query_info():
+            yield clickhouse_grpc_pb2.QueryInfo(
+                query="SELECT number, sleep(0.2) FROM numbers(100) SETTINGS max_block_size = 1",
+                output_format="TabSeparated",
+            )
+            # Never return: returning would send `WritesDone` and complete the server-side read.
+            keep_open.wait()
+
+        return send_query_info
+
+    # Whether the read is still in flight when the call is torn down is a race, so repeat.
+    for _ in range(10):
+        keep_open = Event()
+        try:
+            call = stub.ExecuteQueryWithStreamIO(
+                make_send_query_info(keep_open)(), timeout=30
+            )
+            # Receive one intermediate result, then drop the call in the middle of the output.
+            next(call)
+            call.cancel()
+        finally:
+            keep_open.set()
+
+    wait_for_no_grpc_call_threads()
+    assert query("SELECT 4") == "4\n"
+
+
 def test_cancel_while_generating_output():
     def send_query_info():
         yield clickhouse_grpc_pb2.QueryInfo(
