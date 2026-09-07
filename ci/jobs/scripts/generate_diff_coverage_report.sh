@@ -114,6 +114,11 @@ if [ ${#patterns[@]} -eq 0 ]; then
   # agreement between several master runs, filtering out lines that fire only
   # occasionally on master (background/async code). Only this outcome consumes
   # them, so the downloads are gated here and C/C++ PRs pay nothing.
+  #
+  # The extras are best-effort: the analysis works with however many are
+  # present, so a flaked download must not fail the script (set -e) and turn an
+  # optional stabilization input into a CI-failure path. A failed download only
+  # removes its partial file - the slot is reused by the next candidate commit.
   EXTRA_BASELINES_MAX=3
   slot=2
   for (( j=FOUND_INDEX+1; j<${#COMMITS[@]}; j++ )); do
@@ -125,8 +130,12 @@ if [ ${#patterns[@]} -eq 0 ]; then
     echo "Checking extra baseline for commit ${TEST_COMMIT}..."
     if wget --spider "${COVERAGE_URL}" 2>&1 | grep -q '200 OK'; then
       echo "Found extra baseline #$((slot - 1)) at ${COVERAGE_URL}"
-      wget --quiet "${COVERAGE_URL}" -O "base_llvm_coverage_${slot}.info"
-      slot=$((slot + 1))
+      if wget --quiet "${COVERAGE_URL}" -O "base_llvm_coverage_${slot}.info"; then
+        slot=$((slot + 1))
+      else
+        rm -f "base_llvm_coverage_${slot}.info"
+        echo "WARNING: failed to download extra baseline from ${COVERAGE_URL}, continuing without it"
+      fi
     fi
   done
   echo "Downloaded $((slot - 2)) extra master baselines"
