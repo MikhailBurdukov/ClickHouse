@@ -8,9 +8,10 @@ from pathlib import Path
 
 from praktika.info import Info
 
-# Bounds the WHOLE hook, including the SSM fetch: Shell.get_output runs the
-# AWS CLI with no timeout of its own, and a pre_hook blocks every job in the
-# workflow, so a stalled credential path must become a warning, not a hang.
+# Bounds the WHOLE hook, including the SSM fetch: the boto3 call runs
+# in-process, so SIGALRM interrupts it directly (no child process to leak),
+# and a pre_hook blocks every job in the workflow, so a stalled credential
+# path must become a warning, not a hang.
 TOTAL_TIMEOUT_SEC = 30
 
 
@@ -27,15 +28,12 @@ def refresh():
 
     try:
         # get_secret returns a Secret.Config handle; join_with batches both
-        # SSM parameters into one get-parameters call, values in request
-        # order. The timeout bounds the AWS CLI subprocess itself (killed on
-        # expiry), so a stalled SSM/credential path can neither block the
-        # workflow nor leak a hung process on the runner; SIGALRM below
-        # remains the whole-script backstop.
+        # SSM parameters into one get_parameters call, values in request
+        # order. SIGALRM (see __main__) bounds this in-process boto3 call.
         loom_url, token = (
             info.get_secret("loom-url")
             .join_with(info.get_secret("loom-ci-token"))
-            .get_value(timeout=15)
+            .get_value()
         )
         loom_url = loom_url.rstrip("/")
     except Exception:
