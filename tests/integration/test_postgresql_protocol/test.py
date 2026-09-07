@@ -1218,8 +1218,12 @@ def test_out_of_cycle_rejection_keeps_connection_usable(started_cluster):
     for label, message in (("Flush", _fe("H", b"")), ("CopyFail", _fe("f", b""))):
         sock, read_until_ready = _pg_raw_extended_query_session(node)
 
+        # `Parse` opens an extended-query cycle and the simple query that follows ends it,
+        # so the rejection below is out of cycle even though no `Sync` was ever sent.
+        sock.sendall(_fe("P", b"\x00" + b"SELECT 1\x00" + struct.pack("!H", 0)))
         sock.sendall(_fe("Q", b"SELECT 1\x00"))
         types = read_types(read_until_ready)
+        assert "1" in types, f"{label}: Parse must be accepted, got {types}"
         assert "C" in types, f"{label}: control query must complete, got {types}"
 
         sock.sendall(message)

@@ -82,7 +82,8 @@ private:
     bool ignore_until_sync = false;
 
     /// True between the first Parse/Bind/Describe/Execute/Close of an extended-query
-    /// cycle and the `Sync` that ends it. Outside such a cycle no `Sync` is coming.
+    /// cycle and the `Sync`, or the simple `Query`, that ends it. Outside such a cycle
+    /// no `Sync` is coming.
     bool in_extended_query_cycle = false;
 
     std::shared_ptr<ReadBufferFromPocoSocket> in;
