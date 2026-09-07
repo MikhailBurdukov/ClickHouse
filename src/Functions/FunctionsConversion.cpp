@@ -3354,8 +3354,9 @@ bool castBothTypes(const IDataType * left, const IDataType * right, F && f)
 
 /// Whether a numeric conversion `from` -> `to` can be JIT-compiled.
 ///
-/// Float to integer or `Decimal` lowers to `fptosi` / `fptoui`, poison unless the value fits, where
-/// `ConvertImpl` instead raises or narrows in a way IR cannot reproduce. `Bool` uses `nativeBoolCast`.
+/// Float to integer or `Decimal` lowers to `fptosi` / `fptoui`, which has no defined result outside the
+/// destination range, where `ConvertImpl` instead raises or narrows in a way IR cannot reproduce.
+/// `Bool` uses `nativeBoolCast`.
 static bool isCompilableNumericConversion(const IDataType * from, const IDataType * to)
 {
     return castBothTypes(from, to, [](const auto & left, const auto & right)
