@@ -78,13 +78,14 @@ void ASTSettingsProfileElement::formatImpl(WriteBuffer & ostr, const FormatSetti
 
     formatSettingName(setting_name, ostr);
 
-    /// `FieldVisitorToString` quotes strings; `maskURIPassword` is unaffected by the surrounding quotes.
     const auto render = [&](const Field & field)
     {
-        String str = applyVisitor(FieldVisitorToString{}, field);
         if (!settings.show_secrets)
-            CoreSettings::maskSettingValue(setting_name, str);
-        return str;
+        {
+            if (auto masked = CoreSettings::renderSecretSettingValue(setting_name, field))
+                return *masked;
+        }
+        return applyVisitor(FieldVisitorToString{}, field);
     };
 
     if (value)
@@ -128,9 +129,11 @@ void ASTSettingsProfileElement::formatImpl(WriteBuffer & ostr, const FormatSetti
 
 bool ASTSettingsProfileElement::hasSecretParts() const
 {
-    if (!CoreSettings::SETTINGS_TO_HIDE.contains(setting_name))
-        return false;
-    return value || min_value || max_value || !disallowed_values.empty();
+    const auto is_secret = [this](const Field & field)
+    { return CoreSettings::renderSecretSettingValue(setting_name, field).has_value(); };
+
+    return (value && is_secret(*value)) || (min_value && is_secret(*min_value)) || (max_value && is_secret(*max_value))
+        || std::any_of(disallowed_values.begin(), disallowed_values.end(), is_secret);
 }
 
 

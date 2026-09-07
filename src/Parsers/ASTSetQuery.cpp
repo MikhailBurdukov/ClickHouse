@@ -53,6 +53,25 @@ static std::array<const EngineSettingsToHide *, 6> engineSettingsToHide()
     };
 }
 
+/// Renders a change whose value is a secret as the SQL text that hides it, and returns `nullopt` for
+/// a change that carries none. `formatImpl` and `hasSecretParts` both go through this, so they cannot
+/// disagree on what is secret.
+static std::optional<String> renderSecretChangeValue(const SettingChange & change)
+{
+    if (auto masked = CoreSettings::renderSecretSettingValue(change.name, change.value))
+        return masked;
+
+    for (const auto * settings_to_hide : engineSettingsToHide())
+    {
+        auto it = settings_to_hide->find(change.name);
+        if (it != settings_to_hide->end())
+            return it->second(change.value);
+    }
+
+    return {};
+}
+
+
 class FieldVisitorToSetting : public StaticVisitor<String>
 {
 public:
@@ -170,38 +189,13 @@ void ASTSetQuery::formatImpl(WriteBuffer & ostr, const FormatSettings & format, 
         if (change.shorthand && change.value == Field(true))
             continue;
 
-        auto format_if_secret = [&]() -> bool
-        {
-            CustomType custom;
-            if (change.value.tryGet<CustomType>(custom) && custom.isSecret())
-            {
-                ostr << " = " << custom.toString(/* show_secrets */false);
-                return true;
-            }
+        std::optional<String> masked;
+        if (!format.show_secrets)
+            masked = renderSecretChangeValue(change);
 
-            /// Matches `hasSecretParts`: a non-String value cannot embed a URI password, and the
-            /// AST JSON path can carry any `Field` type here.
-            String masked;
-            if (change.value.tryGet<String>(masked) && CoreSettings::maskSettingValue(change.name, masked))
-            {
-                ostr << " = " << quoteString(masked);
-                return true;
-            }
-
-            for (const auto * settings_to_hide : engineSettingsToHide())
-            {
-                auto it = settings_to_hide->find(change.name);
-                if (it == settings_to_hide->end())
-                    continue;
-
-                ostr << " = " << it->second(change.value);
-                return true;
-            }
-
-            return false;
-        };
-
-        if (format.show_secrets || !format_if_secret())
+        if (masked)
+            ostr << " = " << *masked;
+        else
             ostr << " = " << applyVisitor(FieldVisitorToSetting(), change.value);
     }
 
@@ -371,27 +365,8 @@ void ASTSetQuery::readJSON(const Poco::JSON::Object & json)
 
 bool ASTSetQuery::hasSecretParts() const
 {
-    for (const auto & change : changes)
-    {
-        CustomType custom;
-        if (change.value.tryGet<CustomType>(custom) && custom.isSecret())
-            return true;
-        for (const auto * settings_to_hide : engineSettingsToHide())
-        {
-            if (settings_to_hide->contains(change.name))
-                return true;
-        }
-
-        /// Secret only if there is actually a password embedded in it. The value need not be a
-        /// String: a valueless `SETTINGS format_avro_schema_registry_url` carries Bool `true`,
-        /// and the AST JSON path can carry any `Field` type. This runs before any settings
-        /// validation - `executeQueryImpl` masks the query for logging first - so demanding a
-        /// String here would report `BAD_GET` instead of the setting's own `TYPE_MISMATCH`.
-        String masked;
-        if (change.value.tryGet<String>(masked) && CoreSettings::maskSettingValue(change.name, masked))
-            return true;
-    }
-    return false;
+    return std::any_of(
+        changes.begin(), changes.end(), [](const auto & change) { return renderSecretChangeValue(change).has_value(); });
 }
 
 }

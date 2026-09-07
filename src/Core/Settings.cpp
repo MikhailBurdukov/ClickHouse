@@ -9985,9 +9985,9 @@ String Settings::toString(bool show_secrets) const
     {
         if (!first)
             out << ", ";
-        String value = applyVisitor(FieldVisitorToString(), setting.getValue());
-        CoreSettings::maskSettingValue(String(setting.getName()), setting.getValue(), value);
-        out << setting.getName() << " = " << value;
+        auto masked = CoreSettings::renderSecretSettingValue(String(setting.getName()), setting.getValue());
+        out << setting.getName() << " = "
+            << (masked ? *masked : applyVisitor(FieldVisitorToString(), setting.getValue()));
         first = false;
     }
     return out.str();
