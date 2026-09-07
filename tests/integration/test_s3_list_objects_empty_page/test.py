@@ -87,3 +87,69 @@ def test_empty_listing_page_does_not_hide_parts(start_cluster):
 
     control_mock("disarm")
     node.query("DROP TABLE test_empty_page SYNC")
+
+
+def test_empty_listing_page_does_not_create_intersecting_parts(start_cluster):
+    """A disk that comes up empty makes the table renumber its blocks and collide with itself.
+
+    This is the damage the previous test stops one step short of. If a restart hides the existing
+    parts, the block counter restarts from 1, so parts written afterwards reuse block numbers that
+    are already on the disk. Each generation merges into a level 1 part sharing the same left
+    edge - `all_1_2_1` and `all_1_3_1` - and `MergeTreePartInfo::contains` rejects that pair,
+    because a containing part may only have an equal level when the block range is identical.
+    Once both generations are visible the table cannot be loaded at all:
+    `Part ... intersects previous part ...`.
+
+    The merges matter: without them both generations would only produce level 0 parts whose names
+    collide outright, which is not an intersection.
+    """
+    node = cluster.instances["node"]
+
+    node.query("DROP TABLE IF EXISTS test_intersecting SYNC")
+    node.query(
+        f"""
+        CREATE TABLE test_intersecting (key Int32, value String)
+        ENGINE = MergeTree()
+        ORDER BY key
+        SETTINGS disk = disk(
+            name = disk_intersecting,
+            type = s3_plain_rewritable,
+            endpoint = 'http://resolver:{MOCK_PORT}/root/intersecting/',
+            access_key_id = minio,
+            secret_access_key = 'ClickHouse_Minio_P@ssw0rd')
+        """
+    )
+
+    def insert(count, offset):
+        node.query(
+            f"INSERT INTO test_intersecting "
+            f"SELECT number + {offset}, toString(number) FROM numbers({count})"
+        )
+
+    # First generation: two parts merged into all_1_2_1.
+    insert(50, 0)
+    insert(50, 50)
+    node.query("OPTIMIZE TABLE test_intersecting FINAL")
+    assert int(node.query("SELECT count() FROM test_intersecting")) == 100
+
+    node.stop_clickhouse()
+    control_mock("arm")
+    node.start_clickhouse()
+
+    # Second generation. Without the fix the table is empty here, so these blocks are numbered
+    # from 1 again and the merge below produces all_1_3_1 next to the surviving all_1_2_1.
+    insert(50, 100)
+    insert(50, 150)
+    insert(50, 200)
+    node.query("OPTIMIZE TABLE test_intersecting FINAL")
+
+    # Restore normal listings, so the next startup sees every directory on the disk.
+    node.stop_clickhouse()
+    control_mock("disarm")
+    node.start_clickhouse()
+
+    assert int(node.query("SELECT count() FROM test_intersecting")) == 250
+    assert not node.contains_in_log("intersects previous part")
+    assert not node.contains_in_log("intersects next part")
+
+    node.query("DROP TABLE test_intersecting SYNC")
