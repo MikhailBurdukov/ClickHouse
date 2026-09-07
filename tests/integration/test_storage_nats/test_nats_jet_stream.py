@@ -1463,10 +1463,11 @@ def test_nats_jet_stream_skipped_broken_message_is_not_redelivered_after_reconne
     #
     # The broker's own delivery counter is the oracle, and it is read while the malformed message is
     # the only one published, so the count is a statement about that message alone: one delivery
-    # means the skip survived the reconnect, two mean it was handed back. Only the hard kill can be
-    # measured that way, for the reason the guard below gives. The ACK deadline is far beyond every
-    # wait here, so a redelivery cannot come from anywhere else, and the run holds the flush interval
-    # open so the reconnect lands inside a cycle.
+    # means the skip survived the reconnect, two mean it was handed back. Losing the recovery's
+    # publish can only keep the count at one, so this is asked on both arms; only the
+    # acknowledgement itself is asked where the guard below says. The ACK deadline is far beyond
+    # every wait here, so a redelivery cannot come from anywhere else, and the run holds the flush
+    # interval open so the reconnect lands inside a cycle.
     asyncio.run(add_durable_consumer(cluster, "test_stream", "test_consumer", ack_wait_sec = 600))
 
     # Anchored before the table exists, so the first streaming cycle counts however quickly it
@@ -1528,23 +1529,24 @@ def test_nats_jet_stream_skipped_broken_message_is_not_redelivered_after_reconne
     # than still being in flight when the counter is read.
     _wait_for_parked_pull_request()
 
-    # Only the hard kill can be measured here. It answers nothing on its way out, so the recovery
-    # runs after the client has reconnected and what it decides for the skipped message reaches a
+    # Only the hard kill can be asked for the acknowledgement itself. It answers nothing on its way
+    # out, so the recovery runs after the client has reconnected and its acknowledgement reaches a
     # live broker. A graceful shutdown answers the parked pull request as it exits, so the recovery
-    # publishes into a connection whose JetStream side is already down, and both an acknowledgement
-    # and a hand-back are fire-and-forget publishes whose status the client discards, so either can
-    # be lost. Everything below this block is asserted on both arms.
+    # publishes into a connection whose JetStream side is already down, and neither `natsMsg_Ack` nor
+    # `natsMsg_Nak` waits for the server, so the publish can be lost and the floor stay at zero.
     if kill is nats_helpers.hard_kill_nats:
         # The recovery acknowledged the skipped message and the broker has it, so the skip is
         # committed rather than merely not redelivered yet.
         _wait_for_ack_floor(1)
 
-        # A hand-back is a NAK, which the broker redelivers at once, so one delivery for the single
-        # message published so far means the skip survived the reconnect.
-        consumer_seq = asyncio.run(get_delivered_consumer_seq(cluster, "test_stream", "test_consumer"))
-        assert consumer_seq == 1, (
-            "the skipped message was handed back to the broker and delivered again: "
-            "{} deliveries for one message".format(consumer_seq))
+    # A hand-back is a NAK, which the broker redelivers at once, so one delivery for the single
+    # message published so far means the skip survived the reconnect. This holds on both arms: the
+    # cycle consumed the message before the restart, so one delivery is the floor, and losing the
+    # recovery's publish can only keep the count there.
+    consumer_seq = asyncio.run(get_delivered_consumer_seq(cluster, "test_stream", "test_consumer"))
+    assert consumer_seq == 1, (
+        "the skipped message was handed back to the broker and delivered again: "
+        "{} deliveries for one message".format(consumer_seq))
 
     # A stale subscription consumes nothing, so the view holding this row also means the recovery
     # did happen - deferred to a cycle that holds nothing rather than skipped altogether. It waits
