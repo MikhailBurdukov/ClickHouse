@@ -482,7 +482,8 @@ void applyPatchesIndicesCombined(
             continue;
 
         auto & result_versions = addDataVersionForColumn(versions_block, result_column.name, result_block.rows(), source_data_version);
-        result_column.column = removeSpecialRepresentations(result_column.column);
+        /// Const columns must be materialized before patching, see the comment in `applyPatchesIndices`.
+        result_column.column = removeSpecialRepresentations(result_column.column->convertToFullColumnIfConst());
 
         /// Local storage so cast results are released after each column update.
         Columns converted_columns;

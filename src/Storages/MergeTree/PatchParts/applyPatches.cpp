@@ -167,7 +167,12 @@ void applyPatchesIndices(
             continue;
 
         auto & result_versions = addDataVersionForColumn(versions_block, result_column.name, result_block.rows(), source_data_version);
-        result_column.column = removeSpecialRepresentations(result_column.column);
+        /// A patch writes distinct values into distinct rows, so a Const column must be materialized
+        /// first. `ColumnConst` claims `isFixedAndContiguous` of its nested column, so it would reach
+        /// `updateInplaceFrom` and throw from `IColumn::updateAt`; on the copying path its `insertFrom`
+        /// only bumps the size and silently discards the patched value.
+        /// An on-fly mutation step produces such a column for `UPDATE col = <constant>`.
+        result_column.column = removeSpecialRepresentations(result_column.column->convertToFullColumnIfConst());
 
         for (const auto & patch_indices : patches)
         {
