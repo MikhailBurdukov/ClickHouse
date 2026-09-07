@@ -133,11 +133,11 @@ def permissions_block(operation: dict) -> str:
     scopes = []
     for requirement in operation.get("security") or []:
         for scheme_scopes in requirement.values():
-            for scope in scheme_scopes:
-                if scope not in scopes:
-                    scopes.append(scope)
+            scopes.extend(scheme_scopes)
     if not scopes:
         return ""
+    # Backtick spans, not `<code>`: MDX treats code-span contents literally, so a scope carrying `<`
+    # or `{` needs no escaping. The same property `mdx_escape` relies on.
     listed = ", ".join(f"`{scope}`" for scope in scopes)
     heading = "Permissions" if len(scopes) > 1 else "Permission"
     plural = "s" if len(scopes) > 1 else ""
