@@ -60,6 +60,14 @@ protected:
     /// rows with equal sort keys among its first rows.
     bool anySourceHasRunsOfEqualKeys() const;
 
+    /// Whether the queue detects batches longer than one row (decided in `initialize`).
+    /// A batch of more than one row is not by itself evidence that the detection ran: with a
+    /// single cursor left in the queue there is nothing to compare against, so its whole
+    /// remainder is always reported as one batch. An algorithm that does extra work per batch
+    /// must therefore test this flag rather than the batch size, or it would pay for batches
+    /// exactly where the detection was disabled because they cannot pay off.
+    bool batch_detection_enabled = false;
+
     /// Used in Vertical merge algorithm to gather non-PK/non-index columns (on next step)
     /// If it is not nullptr then it should be populated during execution
     WriteBuffer * out_row_sources_buf = nullptr;

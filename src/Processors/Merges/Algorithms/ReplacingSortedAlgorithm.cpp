@@ -63,6 +63,21 @@ ReplacingSortedAlgorithm::ReplacingSortedAlgorithm(
     uses_runs_of_equal_keys = can_skip_to_run_end;
 }
 
+void ReplacingSortedAlgorithm::initialize(Inputs inputs)
+{
+    IMergingAlgorithmWithSharedChunks::initialize(std::move(inputs));
+
+    /// Skipping runs needs the queue to actually detect batches. A batch longer than one row is
+    /// not evidence of that on its own: a queue with one cursor left always reports its whole
+    /// remainder as one batch, since there is nothing to compare it against. Without this
+    /// condition the probe for the end of a run would run on every row of a single-input merge -
+    /// which is every `INSERT` into a `ReplacingMergeTree` with `optimize_on_insert` (on by
+    /// default), where `MergeTreeDataWriter::mergeBlock` merges one already sorted block. When
+    /// that block holds no runs of equal keys, the detection is disabled and the merge has to
+    /// cost exactly what it costs with the plain heap.
+    skip_runs_of_equal_keys = can_skip_to_run_end && batch_detection_enabled;
+}
+
 void ReplacingSortedAlgorithm::insertRow()
 {
     if (is_deleted_column_number != -1)
@@ -258,7 +273,7 @@ IMergingAlgorithm::Status ReplacingSortedAlgorithm::merge()
         /// rows would each merely replace `selected_row` with the next one. Sources with a
         /// non-zero part level are excluded to keep the exact behavior of
         /// `rowsHaveDifferentSortColumns`, which does not compare rows of such sources at all.
-        if (can_skip_to_run_end && current_batch_size > 1 && !current->permutation
+        if (skip_runs_of_equal_keys && current_batch_size > 1 && !current->permutation
             && sources_origin_merge_tree_part_level[current->order] == 0)
         {
             size_t run_begin = current->getPos();

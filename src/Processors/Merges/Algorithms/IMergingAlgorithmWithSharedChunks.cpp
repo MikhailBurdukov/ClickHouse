@@ -45,8 +45,8 @@ void IMergingAlgorithmWithSharedChunks::initialize(Inputs inputs)
     /// `SortCursor`, so it keeps the heap container (see `sortDescriptionCompareIsExpensive`),
     /// and the batches are detected only when the algorithm can make use of them.
     bool compare_is_expensive = sortDescriptionCompareIsExpensive(description);
-    bool detect_batches = compare_is_expensive || (uses_runs_of_equal_keys && anySourceHasRunsOfEqualKeys());
-    queue = SortingQueueForCursor<SortCursor, SortingQueueStrategy::Batch>(cursors, compare_is_expensive, detect_batches);
+    batch_detection_enabled = compare_is_expensive || (uses_runs_of_equal_keys && anySourceHasRunsOfEqualKeys());
+    queue = SortingQueueForCursor<SortCursor, SortingQueueStrategy::Batch>(cursors, compare_is_expensive, batch_detection_enabled);
 }
 
 bool IMergingAlgorithmWithSharedChunks::anySourceHasRunsOfEqualKeys() const
