@@ -1,205 +1,403 @@
--- https://github.com/ClickHouse/ClickHouse/issues/117021
+-- Fixes https://github.com/ClickHouse/ClickHouse/issues/117021.
+
 -- `String = FixedString(N)` ignores the constant's trailing zero padding, but the index terms were
 -- extracted from the padded bytes, so every granule looked unmatched and matching rows disappeared.
 
-DROP TABLE IF EXISTS t_text_index_fixed_string;
-CREATE TABLE t_text_index_fixed_string
-(
-    id UInt32,
-    s String,
-    INDEX tix s TYPE text(tokenizer = ngrams(3))
-)
-ENGINE = MergeTree
-ORDER BY id
-SETTINGS index_granularity = 1;
-INSERT INTO t_text_index_fixed_string VALUES (1, 'hello'), (2, 'world'), (3, 'hello'), (4, 'foobar');
-
-SELECT 'ground truth';
+SELECT 'Ground truth';
 SELECT 'hello' = toFixedString('hello', 10);
 
-SELECT 'text ngrams';
-SELECT count() FROM t_text_index_fixed_string WHERE s = toFixedString('hello', 10);
-SELECT count() FROM t_text_index_fixed_string WHERE s = toFixedString('hello', 10) SETTINGS use_skip_indexes = 0;
-SELECT count() FROM t_text_index_fixed_string WHERE s IN (SELECT toFixedString('hello', 10));
-SELECT count() FROM t_text_index_fixed_string WHERE s IN (SELECT toFixedString('hello', 10)) SETTINGS use_skip_indexes = 0;
+SELECT 'Text Index';
 
-SELECT 'text splitByNonAlpha';
-DROP TABLE IF EXISTS t_text_index_fixed_string_split;
-CREATE TABLE t_text_index_fixed_string_split
+SELECT '-- ngrams tokenizer on a String column';
+
+DROP TABLE IF EXISTS tab_string;
+CREATE TABLE tab_string
 (
     id UInt32,
     s String,
-    INDEX tix s TYPE text(tokenizer = splitByNonAlpha)
+    INDEX idx s TYPE text(tokenizer = ngrams(3))
 )
 ENGINE = MergeTree
 ORDER BY id
 SETTINGS index_granularity = 1;
-INSERT INTO t_text_index_fixed_string_split VALUES (1, 'hello'), (2, 'world'), (3, 'hello');
-SELECT count() FROM t_text_index_fixed_string_split WHERE s = toFixedString('hello', 10);
-SELECT count() FROM t_text_index_fixed_string_split WHERE s = toFixedString('hello', 10) SETTINGS use_skip_indexes = 0;
 
-SELECT 'text array on a String column';
-DROP TABLE IF EXISTS t_text_index_array_tokenizer;
-CREATE TABLE t_text_index_array_tokenizer
+INSERT INTO tab_string VALUES (1, 'hello'), (2, 'world'), (3, 'hello'), (4, 'foobar');
+
+SELECT '---- FixedString comparison';
+SELECT count() FROM tab_string WHERE s = toFixedString('hello', 10);
+SELECT count() FROM tab_string WHERE s = toFixedString('hello', 10) SETTINGS use_skip_indexes = 0;
+SELECT count() FROM tab_string WHERE s IN (SELECT toFixedString('hello', 10));
+SELECT count() FROM tab_string WHERE s IN (SELECT toFixedString('hello', 10)) SETTINGS use_skip_indexes = 0;
+
+DROP TABLE tab_string;
+
+SELECT '-- ngrams tokenizer on a FixedString column';
+
+DROP TABLE IF EXISTS tab_fixed_string;
+CREATE TABLE tab_fixed_string
+(
+    id UInt32,
+    s FixedString(6),
+    INDEX idx s TYPE text(tokenizer = ngrams(3))
+)
+ENGINE = MergeTree
+ORDER BY id
+SETTINGS index_granularity = 1;
+
+INSERT INTO tab_fixed_string VALUES (1, 'hello'), (2, 'world'), (3, 'hello');
+
+SELECT '---- FixedString comparison';
+SELECT count() FROM tab_fixed_string WHERE s = toFixedString('hello', 10);
+SELECT count() FROM tab_fixed_string WHERE s = toFixedString('hello', 10) SETTINGS use_skip_indexes = 0;
+SELECT count() FROM tab_fixed_string WHERE s IN (SELECT toFixedString('hello', 10));
+SELECT count() FROM tab_fixed_string WHERE s IN (SELECT toFixedString('hello', 10)) SETTINGS use_skip_indexes = 0;
+
+DROP TABLE tab_fixed_string;
+
+SELECT '-- splitByNonAlpha tokenizer on a String column';
+
+DROP TABLE IF EXISTS tab_string;
+CREATE TABLE tab_string
 (
     id UInt32,
     s String,
-    INDEX tix s TYPE text(tokenizer = array)
+    INDEX idx s TYPE text(tokenizer = splitByNonAlpha)
 )
 ENGINE = MergeTree
 ORDER BY id
 SETTINGS index_granularity = 1;
-INSERT INTO t_text_index_array_tokenizer VALUES (1, 'hello'), (2, 'world'), (3, 'hello');
-SELECT count() FROM t_text_index_array_tokenizer WHERE s = toFixedString('hello', 10);
-SELECT count() FROM t_text_index_array_tokenizer WHERE s = toFixedString('hello', 10) SETTINGS use_skip_indexes = 0;
-SELECT count() FROM t_text_index_array_tokenizer WHERE s IN (SELECT toFixedString('hello', 10));
-SELECT count() FROM t_text_index_array_tokenizer WHERE s IN (SELECT toFixedString('hello', 10)) SETTINGS use_skip_indexes = 0;
 
-SELECT 'text array on a FixedString column';
-DROP TABLE IF EXISTS t_text_index_fixed_string_column;
-CREATE TABLE t_text_index_fixed_string_column
+INSERT INTO tab_string VALUES (1, 'hello'), (2, 'world'), (3, 'hello');
+
+SELECT '---- FixedString comparison';
+SELECT count() FROM tab_string WHERE s = toFixedString('hello', 10);
+SELECT count() FROM tab_string WHERE s = toFixedString('hello', 10) SETTINGS use_skip_indexes = 0;
+SELECT count() FROM tab_string WHERE s IN (SELECT toFixedString('hello', 10));
+SELECT count() FROM tab_string WHERE s IN (SELECT toFixedString('hello', 10)) SETTINGS use_skip_indexes = 0;
+
+DROP TABLE tab_string;
+
+SELECT '-- splitByNonAlpha tokenizer on a FixedString column';
+
+DROP TABLE IF EXISTS tab_fixed_string;
+CREATE TABLE tab_fixed_string
 (
     id UInt32,
     s FixedString(6),
-    INDEX tix s TYPE text(tokenizer = array)
+    INDEX idx s TYPE text(tokenizer = splitByNonAlpha)
 )
 ENGINE = MergeTree
 ORDER BY id
 SETTINGS index_granularity = 1;
-INSERT INTO t_text_index_fixed_string_column VALUES (1, 'hello'), (2, 'world'), (3, 'hello');
-SELECT count() FROM t_text_index_fixed_string_column WHERE s = toFixedString('hello', 6);
-SELECT count() FROM t_text_index_fixed_string_column WHERE s = toFixedString('hello', 6) SETTINGS use_skip_indexes = 0;
-SELECT count() FROM t_text_index_fixed_string_column WHERE s IN (SELECT toFixedString('hello', 6));
-SELECT count() FROM t_text_index_fixed_string_column WHERE s IN (SELECT toFixedString('hello', 6)) SETTINGS use_skip_indexes = 0;
 
-SELECT 'ngrams on a FixedString column';
-DROP TABLE IF EXISTS t_text_index_fixed_string_ngrams;
-CREATE TABLE t_text_index_fixed_string_ngrams
-(
-    id UInt32,
-    s FixedString(6),
-    INDEX tix s TYPE text(tokenizer = ngrams(3))
-)
-ENGINE = MergeTree
-ORDER BY id
-SETTINGS index_granularity = 1;
-INSERT INTO t_text_index_fixed_string_ngrams VALUES (1, 'hello'), (2, 'world'), (3, 'hello');
-SELECT count() FROM t_text_index_fixed_string_ngrams WHERE s = toFixedString('hello', 10);
-SELECT count() FROM t_text_index_fixed_string_ngrams WHERE s = toFixedString('hello', 10) SETTINGS use_skip_indexes = 0;
+INSERT INTO tab_fixed_string VALUES (1, 'hello'), (2, 'world'), (3, 'hello');
 
-SELECT 'ngrambf_v1';
-DROP TABLE IF EXISTS t_ngrambf_fixed_string;
-CREATE TABLE t_ngrambf_fixed_string
+SELECT '---- FixedString comparison';
+SELECT count() FROM tab_fixed_string WHERE s = toFixedString('hello', 10);
+SELECT count() FROM tab_fixed_string WHERE s = toFixedString('hello', 10) SETTINGS use_skip_indexes = 0;
+SELECT count() FROM tab_fixed_string WHERE s IN (SELECT toFixedString('hello', 10));
+SELECT count() FROM tab_fixed_string WHERE s IN (SELECT toFixedString('hello', 10)) SETTINGS use_skip_indexes = 0;
+
+DROP TABLE tab_fixed_string;
+
+SELECT '-- array tokenizer on a String column';
+
+DROP TABLE IF EXISTS tab_string;
+CREATE TABLE tab_string
 (
     id UInt32,
     s String,
-    INDEX nix s TYPE ngrambf_v1(3, 512, 2, 0)
+    INDEX idx s TYPE text(tokenizer = array)
 )
 ENGINE = MergeTree
 ORDER BY id
 SETTINGS index_granularity = 1;
-INSERT INTO t_ngrambf_fixed_string VALUES (1, 'hello'), (2, 'world'), (3, 'hello'), (4, 'foobar');
-SELECT count() FROM t_ngrambf_fixed_string WHERE s = toFixedString('hello', 10);
-SELECT count() FROM t_ngrambf_fixed_string WHERE s = toFixedString('hello', 10) SETTINGS use_skip_indexes = 0;
-SELECT count() FROM t_ngrambf_fixed_string WHERE s IN (SELECT toFixedString('hello', 10));
-SELECT count() FROM t_ngrambf_fixed_string WHERE s IN (SELECT toFixedString('hello', 10)) SETTINGS use_skip_indexes = 0;
 
-SELECT 'sparseGrams on a FixedString column';
-DROP TABLE IF EXISTS t_text_index_sparse_grams;
-CREATE TABLE t_text_index_sparse_grams
+INSERT INTO tab_string VALUES (1, 'hello'), (2, 'world'), (3, 'hello');
+
+SELECT '---- FixedString comparison';
+SELECT count() FROM tab_string WHERE s = toFixedString('hello', 10);
+SELECT count() FROM tab_string WHERE s = toFixedString('hello', 10) SETTINGS use_skip_indexes = 0;
+SELECT count() FROM tab_string WHERE s IN (SELECT toFixedString('hello', 10));
+SELECT count() FROM tab_string WHERE s IN (SELECT toFixedString('hello', 10)) SETTINGS use_skip_indexes = 0;
+
+DROP TABLE tab_string;
+
+SELECT '-- array tokenizer on a FixedString column';
+
+-- The `array` tokenizer stores the whole padded value as one term, so the constant keeps its padding
+-- and only a constant as wide as the column matches.
+DROP TABLE IF EXISTS tab_fixed_string;
+CREATE TABLE tab_fixed_string
 (
     id UInt32,
     s FixedString(6),
-    INDEX tix s TYPE text(tokenizer = sparseGrams(3))
+    INDEX idx s TYPE text(tokenizer = array)
 )
 ENGINE = MergeTree
 ORDER BY id
 SETTINGS index_granularity = 1;
-INSERT INTO t_text_index_sparse_grams VALUES (1, 'hello'), (2, 'world'), (3, 'hello');
-SELECT count() FROM t_text_index_sparse_grams WHERE s = toFixedString('hello', 10);
-SELECT count() FROM t_text_index_sparse_grams WHERE s = toFixedString('hello', 10) SETTINGS use_skip_indexes = 0;
-SELECT count() FROM t_text_index_sparse_grams WHERE s IN (SELECT toFixedString('hello', 10));
-SELECT count() FROM t_text_index_sparse_grams WHERE s IN (SELECT toFixedString('hello', 10)) SETTINGS use_skip_indexes = 0;
 
-SELECT 'hasAny and hasAll ignore the padding too';
-DROP TABLE IF EXISTS t_text_index_array_column;
-CREATE TABLE t_text_index_array_column
+INSERT INTO tab_fixed_string VALUES (1, 'hello'), (2, 'world'), (3, 'hello');
+
+SELECT '---- FixedString comparison';
+SELECT count() FROM tab_fixed_string WHERE s = toFixedString('hello', 6);
+SELECT count() FROM tab_fixed_string WHERE s = toFixedString('hello', 6) SETTINGS use_skip_indexes = 0;
+SELECT count() FROM tab_fixed_string WHERE s IN (SELECT toFixedString('hello', 6));
+SELECT count() FROM tab_fixed_string WHERE s IN (SELECT toFixedString('hello', 6)) SETTINGS use_skip_indexes = 0;
+
+DROP TABLE tab_fixed_string;
+
+SELECT '-- sparseGrams tokenizer on a String column';
+
+DROP TABLE IF EXISTS tab_string;
+CREATE TABLE tab_string
+(
+    id UInt32,
+    s String,
+    INDEX idx s TYPE text(tokenizer = sparseGrams(3))
+)
+ENGINE = MergeTree
+ORDER BY id
+SETTINGS index_granularity = 1;
+
+INSERT INTO tab_string VALUES (1, 'hello'), (2, 'world'), (3, 'hello');
+
+SELECT '---- FixedString comparison';
+SELECT count() FROM tab_string WHERE s = toFixedString('hello', 10);
+SELECT count() FROM tab_string WHERE s = toFixedString('hello', 10) SETTINGS use_skip_indexes = 0;
+SELECT count() FROM tab_string WHERE s IN (SELECT toFixedString('hello', 10));
+SELECT count() FROM tab_string WHERE s IN (SELECT toFixedString('hello', 10)) SETTINGS use_skip_indexes = 0;
+
+DROP TABLE tab_string;
+
+SELECT '-- sparseGrams tokenizer on a FixedString column';
+
+DROP TABLE IF EXISTS tab_fixed_string;
+CREATE TABLE tab_fixed_string
+(
+    id UInt32,
+    s FixedString(6),
+    INDEX idx s TYPE text(tokenizer = sparseGrams(3))
+)
+ENGINE = MergeTree
+ORDER BY id
+SETTINGS index_granularity = 1;
+
+INSERT INTO tab_fixed_string VALUES (1, 'hello'), (2, 'world'), (3, 'hello');
+
+SELECT '---- FixedString comparison';
+SELECT count() FROM tab_fixed_string WHERE s = toFixedString('hello', 10);
+SELECT count() FROM tab_fixed_string WHERE s = toFixedString('hello', 10) SETTINGS use_skip_indexes = 0;
+SELECT count() FROM tab_fixed_string WHERE s IN (SELECT toFixedString('hello', 10));
+SELECT count() FROM tab_fixed_string WHERE s IN (SELECT toFixedString('hello', 10)) SETTINGS use_skip_indexes = 0;
+
+DROP TABLE tab_fixed_string;
+
+SELECT 'Bloom Filter Index';
+
+SELECT '-- tokenbf_v1 on a String column';
+
+DROP TABLE IF EXISTS tab_string;
+CREATE TABLE tab_string
+(
+    id UInt32,
+    s String,
+    INDEX idx s TYPE tokenbf_v1(512, 2, 0)
+)
+ENGINE = MergeTree
+ORDER BY id
+SETTINGS index_granularity = 1;
+
+INSERT INTO tab_string VALUES (1, 'hello'), (2, 'world'), (3, 'hello'), (4, 'foobar');
+
+SELECT '---- FixedString comparison';
+SELECT count() FROM tab_string WHERE s = toFixedString('hello', 10);
+SELECT count() FROM tab_string WHERE s = toFixedString('hello', 10) SETTINGS use_skip_indexes = 0;
+SELECT count() FROM tab_string WHERE s IN (SELECT toFixedString('hello', 10));
+SELECT count() FROM tab_string WHERE s IN (SELECT toFixedString('hello', 10)) SETTINGS use_skip_indexes = 0;
+
+DROP TABLE tab_string;
+
+SELECT '-- tokenbf_v1 on a FixedString column';
+
+DROP TABLE IF EXISTS tab_fixed_string;
+CREATE TABLE tab_fixed_string
+(
+    id UInt32,
+    s FixedString(6),
+    INDEX idx s TYPE tokenbf_v1(512, 2, 0)
+)
+ENGINE = MergeTree
+ORDER BY id
+SETTINGS index_granularity = 1;
+
+INSERT INTO tab_fixed_string VALUES (1, 'hello'), (2, 'world'), (3, 'hello'), (4, 'foobar');
+
+SELECT '---- FixedString comparison';
+SELECT count() FROM tab_fixed_string WHERE s = toFixedString('hello', 10);
+SELECT count() FROM tab_fixed_string WHERE s = toFixedString('hello', 10) SETTINGS use_skip_indexes = 0;
+SELECT count() FROM tab_fixed_string WHERE s IN (SELECT toFixedString('hello', 10));
+SELECT count() FROM tab_fixed_string WHERE s IN (SELECT toFixedString('hello', 10)) SETTINGS use_skip_indexes = 0;
+
+DROP TABLE tab_fixed_string;
+
+SELECT '-- ngrambf_v1 on a String column';
+
+DROP TABLE IF EXISTS tab_string;
+CREATE TABLE tab_string
+(
+    id UInt32,
+    s String,
+    INDEX idx s TYPE ngrambf_v1(3, 512, 2, 0)
+)
+ENGINE = MergeTree
+ORDER BY id
+SETTINGS index_granularity = 1;
+
+INSERT INTO tab_string VALUES (1, 'hello'), (2, 'world'), (3, 'hello'), (4, 'foobar');
+
+SELECT '---- FixedString comparison';
+SELECT count() FROM tab_string WHERE s = toFixedString('hello', 10);
+SELECT count() FROM tab_string WHERE s = toFixedString('hello', 10) SETTINGS use_skip_indexes = 0;
+SELECT count() FROM tab_string WHERE s IN (SELECT toFixedString('hello', 10));
+SELECT count() FROM tab_string WHERE s IN (SELECT toFixedString('hello', 10)) SETTINGS use_skip_indexes = 0;
+
+DROP TABLE tab_string;
+
+SELECT '-- ngrambf_v1 on a FixedString column';
+
+DROP TABLE IF EXISTS tab_fixed_string;
+CREATE TABLE tab_fixed_string
+(
+    id UInt32,
+    s FixedString(6),
+    INDEX idx s TYPE ngrambf_v1(3, 512, 2, 0)
+)
+ENGINE = MergeTree
+ORDER BY id
+SETTINGS index_granularity = 1;
+
+INSERT INTO tab_fixed_string VALUES (1, 'hello'), (2, 'world'), (3, 'hello'), (4, 'foobar');
+
+SELECT '---- FixedString comparison';
+SELECT count() FROM tab_fixed_string WHERE s = toFixedString('hello', 10);
+SELECT count() FROM tab_fixed_string WHERE s = toFixedString('hello', 10) SETTINGS use_skip_indexes = 0;
+SELECT count() FROM tab_fixed_string WHERE s IN (SELECT toFixedString('hello', 10));
+SELECT count() FROM tab_fixed_string WHERE s IN (SELECT toFixedString('hello', 10)) SETTINGS use_skip_indexes = 0;
+
+DROP TABLE tab_fixed_string;
+
+SELECT 'Functions';
+
+DROP TABLE IF EXISTS tab_string;
+DROP TABLE IF EXISTS tab_string_ngrambf;
+DROP TABLE IF EXISTS tab_array;
+DROP TABLE IF EXISTS tab_array_ngrambf;
+DROP TABLE IF EXISTS tab_map;
+
+CREATE TABLE tab_string
+(
+    id UInt32,
+    s String,
+    INDEX idx s TYPE text(tokenizer = ngrams(3))
+)
+ENGINE = MergeTree
+ORDER BY id
+SETTINGS index_granularity = 1;
+
+CREATE TABLE tab_string_ngrambf
+(
+    id UInt32,
+    s String,
+    INDEX idx s TYPE ngrambf_v1(3, 512, 2, 0)
+)
+ENGINE = MergeTree
+ORDER BY id
+SETTINGS index_granularity = 1;
+
+CREATE TABLE tab_array
 (
     id UInt32,
     arr Array(String),
-    INDEX tix arr TYPE text(tokenizer = array)
+    INDEX idx arr TYPE text(tokenizer = array)
 )
 ENGINE = MergeTree
 ORDER BY id
 SETTINGS index_granularity = 1;
-INSERT INTO t_text_index_array_column VALUES (1, ['hello']), (2, ['world']), (3, ['hello']);
-SELECT count() FROM t_text_index_array_column WHERE hasAny(arr, [toFixedString('hello', 10)]);
-SELECT count() FROM t_text_index_array_column WHERE hasAny(arr, [toFixedString('hello', 10)]) SETTINGS use_skip_indexes = 0, query_plan_direct_read_from_text_index = 0;
-SELECT count() FROM t_text_index_array_column WHERE hasAll(arr, [toFixedString('hello', 10)]);
-SELECT count() FROM t_text_index_array_column WHERE hasAll(arr, [toFixedString('hello', 10)]) SETTINGS use_skip_indexes = 0, query_plan_direct_read_from_text_index = 0;
 
-DROP TABLE IF EXISTS t_ngrambf_array_column;
-CREATE TABLE t_ngrambf_array_column
+CREATE TABLE tab_array_ngrambf
 (
     id UInt32,
     arr Array(String),
-    INDEX nix arr TYPE ngrambf_v1(3, 512, 2, 0)
+    INDEX idx arr TYPE ngrambf_v1(3, 512, 2, 0)
 )
 ENGINE = MergeTree
 ORDER BY id
 SETTINGS index_granularity = 1;
-INSERT INTO t_ngrambf_array_column VALUES (1, ['hello']), (2, ['world']), (3, ['hello']);
-SELECT count() FROM t_ngrambf_array_column WHERE hasAny(arr, [toFixedString('hello', 10)]);
-SELECT count() FROM t_ngrambf_array_column WHERE hasAny(arr, [toFixedString('hello', 10)]) SETTINGS use_skip_indexes = 0;
-SELECT count() FROM t_ngrambf_array_column WHERE hasAll(arr, [toFixedString('hello', 10)]);
-SELECT count() FROM t_ngrambf_array_column WHERE hasAll(arr, [toFixedString('hello', 10)]) SETTINGS use_skip_indexes = 0;
 
--- These compare the raw padded bytes, so their terms must keep the padding. `text(tokenizer = array)`
--- answers them by exact direct read, where a stripped term would return rows the predicate rejects.
-SELECT 'has and mapContains keep the padding';
-SELECT count() FROM t_text_index_array_column WHERE has(arr, toFixedString('hello', 10));
-SELECT count() FROM t_text_index_array_column WHERE has(arr, toFixedString('hello', 10)) SETTINGS use_skip_indexes = 0, query_plan_direct_read_from_text_index = 0;
-SELECT count() FROM t_text_index_array_column WHERE has(arr, 'hello');
-SELECT count() FROM t_text_index_array_column WHERE has(arr, 'hello') SETTINGS use_skip_indexes = 0, query_plan_direct_read_from_text_index = 0;
-
-DROP TABLE IF EXISTS t_text_index_map_keys;
-CREATE TABLE t_text_index_map_keys
+CREATE TABLE tab_map
 (
     id UInt32,
     m Map(String, String),
-    INDEX kix mapKeys(m) TYPE text(tokenizer = array),
-    INDEX vix mapValues(m) TYPE text(tokenizer = array)
+    INDEX idx_keys mapKeys(m) TYPE text(tokenizer = array),
+    INDEX idx_values mapValues(m) TYPE text(tokenizer = array)
 )
 ENGINE = MergeTree
 ORDER BY id
 SETTINGS index_granularity = 1;
-INSERT INTO t_text_index_map_keys VALUES (1, map('hello', 'world')), (2, map('foo', 'bar')), (3, map('hello', 'world'));
-SELECT count() FROM t_text_index_map_keys WHERE mapContainsKey(m, toFixedString('hello', 10));
-SELECT count() FROM t_text_index_map_keys WHERE mapContainsKey(m, toFixedString('hello', 10)) SETTINGS use_skip_indexes = 0, query_plan_direct_read_from_text_index = 0;
-SELECT count() FROM t_text_index_map_keys WHERE mapContainsValue(m, toFixedString('world', 10));
-SELECT count() FROM t_text_index_map_keys WHERE mapContainsValue(m, toFixedString('world', 10)) SETTINGS use_skip_indexes = 0, query_plan_direct_read_from_text_index = 0;
-SELECT count() FROM t_text_index_map_keys WHERE mapContainsKey(m, 'hello');
-SELECT count() FROM t_text_index_map_keys WHERE mapContainsKey(m, 'hello') SETTINGS use_skip_indexes = 0, query_plan_direct_read_from_text_index = 0;
 
-SELECT 'startsWith and endsWith keep the padding';
-SELECT count() FROM t_text_index_fixed_string WHERE startsWith(s, toFixedString('hel', 10));
-SELECT count() FROM t_text_index_fixed_string WHERE startsWith(s, toFixedString('hel', 10)) SETTINGS use_skip_indexes = 0;
-SELECT count() FROM t_text_index_fixed_string WHERE endsWith(s, toFixedString('llo', 10));
-SELECT count() FROM t_text_index_fixed_string WHERE endsWith(s, toFixedString('llo', 10)) SETTINGS use_skip_indexes = 0;
+INSERT INTO tab_string VALUES (1, 'hello'), (2, 'world'), (3, 'hello'), (4, 'foobar');
+INSERT INTO tab_string_ngrambf VALUES (1, 'hello'), (2, 'world'), (3, 'hello'), (4, 'foobar');
+INSERT INTO tab_array VALUES (1, ['hello']), (2, ['world']), (3, ['hello']);
+INSERT INTO tab_array_ngrambf VALUES (1, ['hello']), (2, ['world']), (3, ['hello']);
+INSERT INTO tab_map VALUES (1, map('hello', 'world')), (2, map('foo', 'bar')), (3, map('hello', 'world'));
 
-SELECT 'unpadded constant still prunes';
-SELECT count() FROM t_text_index_fixed_string WHERE s = 'hello';
-SELECT count() FROM t_text_index_fixed_string WHERE s = 'nosuch';
-SELECT count() FROM t_ngrambf_fixed_string WHERE s = 'hello';
-SELECT count() FROM t_ngrambf_fixed_string WHERE s = 'nosuch';
+SELECT '-- hasAny and hasAll ignore the padding';
+SELECT count() FROM tab_array WHERE hasAny(arr, [toFixedString('hello', 10)]);
+SELECT count() FROM tab_array WHERE hasAny(arr, [toFixedString('hello', 10)]) SETTINGS use_skip_indexes = 0, query_plan_direct_read_from_text_index = 0;
+SELECT count() FROM tab_array WHERE hasAll(arr, [toFixedString('hello', 10)]);
+SELECT count() FROM tab_array WHERE hasAll(arr, [toFixedString('hello', 10)]) SETTINGS use_skip_indexes = 0, query_plan_direct_read_from_text_index = 0;
+SELECT count() FROM tab_array_ngrambf WHERE hasAny(arr, [toFixedString('hello', 10)]);
+SELECT count() FROM tab_array_ngrambf WHERE hasAny(arr, [toFixedString('hello', 10)]) SETTINGS use_skip_indexes = 0;
+SELECT count() FROM tab_array_ngrambf WHERE hasAll(arr, [toFixedString('hello', 10)]);
+SELECT count() FROM tab_array_ngrambf WHERE hasAll(arr, [toFixedString('hello', 10)]) SETTINGS use_skip_indexes = 0;
 
-DROP TABLE t_text_index_fixed_string;
-DROP TABLE t_text_index_fixed_string_split;
-DROP TABLE t_text_index_array_tokenizer;
-DROP TABLE t_text_index_fixed_string_column;
-DROP TABLE t_text_index_fixed_string_ngrams;
-DROP TABLE t_ngrambf_fixed_string;
-DROP TABLE t_text_index_sparse_grams;
-DROP TABLE t_text_index_array_column;
-DROP TABLE t_ngrambf_array_column;
-DROP TABLE t_text_index_map_keys;
+-- The functions below compare the raw padded bytes, so their terms must keep the padding.
+-- `text(tokenizer = array)` answers them by exact direct read, where a stripped term would return
+-- rows the predicate rejects.
+SELECT '-- has keeps the padding';
+SELECT count() FROM tab_array WHERE has(arr, toFixedString('hello', 10));
+SELECT count() FROM tab_array WHERE has(arr, toFixedString('hello', 10)) SETTINGS use_skip_indexes = 0, query_plan_direct_read_from_text_index = 0;
+SELECT count() FROM tab_array WHERE has(arr, 'hello');
+SELECT count() FROM tab_array WHERE has(arr, 'hello') SETTINGS use_skip_indexes = 0, query_plan_direct_read_from_text_index = 0;
+
+SELECT '-- mapContainsKey and mapContainsValue keep the padding';
+SELECT count() FROM tab_map WHERE mapContainsKey(m, toFixedString('hello', 10));
+SELECT count() FROM tab_map WHERE mapContainsKey(m, toFixedString('hello', 10)) SETTINGS use_skip_indexes = 0, query_plan_direct_read_from_text_index = 0;
+SELECT count() FROM tab_map WHERE mapContainsValue(m, toFixedString('world', 10));
+SELECT count() FROM tab_map WHERE mapContainsValue(m, toFixedString('world', 10)) SETTINGS use_skip_indexes = 0, query_plan_direct_read_from_text_index = 0;
+SELECT count() FROM tab_map WHERE mapContainsKey(m, 'hello');
+SELECT count() FROM tab_map WHERE mapContainsKey(m, 'hello') SETTINGS use_skip_indexes = 0, query_plan_direct_read_from_text_index = 0;
+
+SELECT '-- startsWith and endsWith keep the padding';
+SELECT count() FROM tab_string WHERE startsWith(s, toFixedString('hel', 10));
+SELECT count() FROM tab_string WHERE startsWith(s, toFixedString('hel', 10)) SETTINGS use_skip_indexes = 0;
+SELECT count() FROM tab_string WHERE endsWith(s, toFixedString('llo', 10));
+SELECT count() FROM tab_string WHERE endsWith(s, toFixedString('llo', 10)) SETTINGS use_skip_indexes = 0;
+SELECT count() FROM tab_string WHERE startsWith(s, 'hel');
+SELECT count() FROM tab_string WHERE startsWith(s, 'hel') SETTINGS use_skip_indexes = 0;
+SELECT count() FROM tab_string WHERE endsWith(s, 'llo');
+SELECT count() FROM tab_string WHERE endsWith(s, 'llo') SETTINGS use_skip_indexes = 0;
+
+SELECT '-- an unpadded constant still prunes';
+SELECT count() FROM tab_string WHERE s = 'hello';
+SELECT count() FROM tab_string WHERE s = 'nosuch';
+SELECT count() FROM tab_string_ngrambf WHERE s = 'hello';
+SELECT count() FROM tab_string_ngrambf WHERE s = 'nosuch';
+
+DROP TABLE tab_string;
+DROP TABLE tab_string_ngrambf;
+DROP TABLE tab_array;
+DROP TABLE tab_array_ngrambf;
+DROP TABLE tab_map;

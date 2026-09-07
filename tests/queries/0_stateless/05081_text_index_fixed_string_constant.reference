@@ -1,37 +1,81 @@
-ground truth
+Ground truth
 1
-text ngrams
+Text Index
+-- ngrams tokenizer on a String column
+---- FixedString comparison
 2
 2
 2
 2
-text splitByNonAlpha
-2
-2
-text array on a String column
-2
-2
-2
-2
-text array on a FixedString column
+-- ngrams tokenizer on a FixedString column
+---- FixedString comparison
 2
 2
 2
 2
-ngrams on a FixedString column
-2
-2
-ngrambf_v1
-2
-2
-2
-2
-sparseGrams on a FixedString column
+-- splitByNonAlpha tokenizer on a String column
+---- FixedString comparison
 2
 2
 2
 2
-hasAny and hasAll ignore the padding too
+-- splitByNonAlpha tokenizer on a FixedString column
+---- FixedString comparison
+2
+2
+2
+2
+-- array tokenizer on a String column
+---- FixedString comparison
+2
+2
+2
+2
+-- array tokenizer on a FixedString column
+---- FixedString comparison
+2
+2
+2
+2
+-- sparseGrams tokenizer on a String column
+---- FixedString comparison
+2
+2
+2
+2
+-- sparseGrams tokenizer on a FixedString column
+---- FixedString comparison
+2
+2
+2
+2
+Bloom Filter Index
+-- tokenbf_v1 on a String column
+---- FixedString comparison
+2
+2
+2
+2
+-- tokenbf_v1 on a FixedString column
+---- FixedString comparison
+2
+2
+2
+2
+-- ngrambf_v1 on a String column
+---- FixedString comparison
+2
+2
+2
+2
+-- ngrambf_v1 on a FixedString column
+---- FixedString comparison
+2
+2
+2
+2
+Functions
+-- hasAny and hasAll ignore the padding
 2
 2
 2
@@ -40,23 +84,28 @@ hasAny and hasAll ignore the padding too
 2
 2
 2
-has and mapContains keep the padding
+-- has keeps the padding
 0
 0
 2
 2
+-- mapContainsKey and mapContainsValue keep the padding
 0
 0
 0
 0
 2
 2
-startsWith and endsWith keep the padding
+-- startsWith and endsWith keep the padding
 0
 0
 0
 0
-unpadded constant still prunes
+2
+2
+2
+2
+-- an unpadded constant still prunes
 2
 0
 2

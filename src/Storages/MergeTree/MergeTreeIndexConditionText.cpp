@@ -973,9 +973,7 @@ static void validateRegexpPatterns(const Array & patterns, const Settings & sett
 #endif
 }
 
-/// `String = FixedString(N)` ignores the constant's trailing zero padding, so the search terms must be
-/// taken from the value without it. `MergeTreeIndexBloomFilter.cpp` does the same in
-/// `coerceStringFieldLikeSearchFunction`.
+/// `String = FixedString(N)` ignores the constant's trailing zero padding, so the search terms must be taken from the value without it.
 static Field stripFixedStringPaddingForTerms(const Field & field, const DataTypePtr & type)
 {
     auto inner_type = removeNullable(removeLowCardinality(type));
@@ -1001,25 +999,10 @@ static Field stripFixedStringPaddingForTerms(const Field & field, const DataType
     return field;
 }
 
-/// These compare a `FixedString` constant through the `String` supertype, which drops the trailing zero
-/// padding. `has`, `mapContainsKey`, `mapContainsValue`, `startsWith` and `endsWith` compare the raw
-/// padded bytes instead, so their terms must keep it; every other supported function rejects such a needle.
+/// These functions compare a `FixedString` constant through the `String` supertype, which drops the trailing zero padding.
 static bool functionIgnoresFixedStringPadding(const String & function_name)
 {
     return function_name == "equals" || function_name == "notEquals" || function_name == "hasAny" || function_name == "hasAll";
-}
-
-/// The terms of a value stay terms of the same value extended with zero bytes for tokenizers that split
-/// on a zero byte (`splitByNonAlpha`, `asciiCJK`) or emit substrings (`ngrams`, `sparseGrams` - which
-/// emits a gram only while consuming the byte at its right border, so appending bytes keeps every gram
-/// and only adds new ones). `array` stores the whole value as one term, `splitByString` keeps the padding
-/// inside the last one, and the remaining tokenizers give no such guarantee.
-static bool tokenizerToleratesZeroPadding(ITokenizer::Type tokenizer_type)
-{
-    return tokenizer_type == ITokenizer::Type::SplitByNonAlpha
-        || tokenizer_type == ITokenizer::Type::Ngrams
-        || tokenizer_type == ITokenizer::Type::SparseGrams
-        || tokenizer_type == ITokenizer::Type::AsciiCJK;
 }
 
 /// A `FixedString` indexed column stores the padding, and so do its terms. Stripping the constant is
@@ -1027,7 +1010,14 @@ static bool tokenizerToleratesZeroPadding(ITokenizer::Type tokenizer_type)
 /// would look for a term the index never stored and prune a granule holding matching rows.
 static bool canStripFixedStringPadding(ITokenizer::Type tokenizer_type, const Block & header)
 {
-    if (tokenizerToleratesZeroPadding(tokenizer_type))
+    static const std::unordered_set<ITokenizer::Type> zero_padding_tolerated_tokenizers = {
+        ITokenizer::Type::SplitByNonAlpha,
+        ITokenizer::Type::Ngrams,
+        ITokenizer::Type::SparseGrams,
+        ITokenizer::Type::AsciiCJK
+    };
+
+    if (zero_padding_tolerated_tokenizers.contains(tokenizer_type))
         return true;
 
     /// A text index is always defined on a single expression.
@@ -1892,14 +1882,15 @@ bool MergeTreeIndexConditionText::tryPrepareSetForTextSearch(
         return false;
 
     size_t total_row_count = prepared_set->getTotalRowCount();
+    const bool is_fixed_string_element = WhichDataType(set_column.getDataType()).isFixedString();
     const bool strip_fixed_string_padding = canStripFixedStringPadding(tokenizer->getType(), header);
 
     for (size_t row = 0; row < total_row_count; ++row)
     {
         std::string_view element = set_column.getDataAt(row);
 
-        /// See stripFixedStringPaddingForTerms: a `FixedString` set element carries its padding.
-        if (WhichDataType(set_column.getDataType()).isFixedString() && strip_fixed_string_padding)
+        /// `FixedString` element carries its padding, which the comparison ignores but the tokenizer would not.
+        if (is_fixed_string_element && strip_fixed_string_padding)
             element = element.substr(0, element.find_last_not_of('\0') + 1);
 
         /// Reject the index usage when there is an empty string in the set.
