@@ -46,7 +46,9 @@ jobs:
         with:
           clear-repository: true
           token: ${{secrets.ROBOT_CLICKHOUSE_COMMIT_TOKEN}}
-          fetch-depth: 0
+          # Bootstrap the selected script; it fetches complete history for the
+          # default branch and active backport branches before processing PRs.
+          fetch-depth: 1
       - name: Debug Info
         uses: ./.github/actions/debug
       - name: Cherry pick
