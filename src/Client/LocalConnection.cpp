@@ -125,6 +125,14 @@ bool LocalConnection::hasReadPendingData() const
 
 std::optional<UInt64> LocalConnection::checkPacket(size_t)
 {
+    /// Unlike `Connection::checkPacket`, `poll` here advances the query state, so it must not be called
+    /// while the client is still feeding data: for a pushing pipeline `pollImpl` would mark the query
+    /// finished. Refresh the latched packet only once the query has already failed - then `poll` merely
+    /// flushes the buffered logs and schedules the `Exception`, which is what lets the client notice the
+    /// failure and stop sending data instead of pushing the rest of the input into a dead pipeline.
+    if (!next_packet_type && state && state->exception)
+        poll(0);
+
     return next_packet_type;
 }
 
@@ -521,9 +529,8 @@ void LocalConnection::sendData(const Block & block, const String &, bool)
     catch (...) // Ok: wrap the exception for the client; `push` can rethrow an exception from a sink
     {
         captureCurrentException();
-        /// Make the failure visible to the client's `checkPacket` right away so that it stops sending data.
-        /// `poll` flushes the buffered logs first and then schedules the `Exception` packet.
-        poll(0);
+        /// The client learns about the failure from `checkPacket`, which schedules the buffered logs and
+        /// then the `Exception` packet, and stops sending data.
         return;
     }
 
