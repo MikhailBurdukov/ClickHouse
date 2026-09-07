@@ -526,6 +526,7 @@ def main() -> int:
     # Group operations by OpenAPI tag, preserving spec traversal order.
     entries_by_tag: dict[str, list] = {}
     expected_files: dict[Path, str] = {}
+    permission_blocks: dict[tuple[str, str], str] = {}
     badge_counts = {"Beta": 0, "Private preview": 0}
     deprecated_count = 0
     total_operations = 0
@@ -533,6 +534,7 @@ def main() -> int:
         total_operations += 1
         entry["description"] = rewrite_spec_links(entry["description"], op_slugs)
         entries_by_tag.setdefault(entry["tag"], []).append(entry)
+        permission_blocks[(entry["method"].lower(), entry["path"])] = entry["permissions"]
         if entry["badge"]:
             badge_counts[entry["badge"]] += 1
         if entry["deprecated"]:
@@ -565,22 +567,23 @@ def main() -> int:
     # which is the only visible place for it given that the page-header
     # description is hidden site-wide by `_site/styles.css`. Swagger-only
     # anchors are rewritten to the per-endpoint pages here as well.
-    for path_item in spec.get("paths", {}).values():
+    for path, path_item in spec.get("paths", {}).items():
         for method, operation in path_item.items():
             if method not in HTTP_METHODS or not isinstance(operation, dict):
                 continue
-            entry_badge, entry_deprecated = classify_operation(operation)
-            permissions = permissions_block(operation)
-            # Every operation overrides `security` with the same basic auth scheme purely to carry its
-            # permission scopes. Once those are rendered the override is noise, and dropping it keeps the
-            # per-operation `Authorizations` section identical to the site-wide one.
+            # `security` carries the permission scopes and nothing else, so it is dropped once they have
+            # been rendered: `permission_blocks` above is the rendered form, and leaving the override in
+            # would give the operation an `Authorizations` section different from every other one.
             operation.pop("security", None)
+            entry_badge, entry_deprecated = classify_operation(operation)
             if entry_badge or entry_deprecated:
+                # Badge pages get their own stub, which already carries the block in its body.
                 continue
-            description = operation.get("description")
             blocks = []
+            description = operation.get("description")
             if description:
                 blocks.append(mdx_escape(rewrite_spec_links(description, op_slugs)))
+            permissions = permission_blocks.get((method, path), "")
             if permissions:
                 blocks.append(permissions)
             if blocks:
