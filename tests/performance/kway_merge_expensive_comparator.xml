@@ -32,6 +32,22 @@
     <query>SELECT * FROM replacing_cheap_key FINAL FORMAT Null SETTINGS split_parts_ranges_into_intersecting_and_non_intersecting_final = 0, split_intersecting_parts_ranges_into_layers_final = 0, enable_vertical_final = 0</query>
     <query>SELECT * FROM replacing_expensive_key FINAL FORMAT Null SETTINGS split_parts_ranges_into_intersecting_and_non_intersecting_final = 0, split_intersecting_parts_ranges_into_layers_final = 0, enable_vertical_final = 0</query>
 
+    <!-- The insert-time merge: `optimize_on_insert` is on by default, so every `INSERT` into a
+         `ReplacingMergeTree` merges the already sorted block through `ReplacingSortedAlgorithm`
+         with a single input. A single cursor always reports its whole remainder as one batch,
+         so this is where the batch interface must cost nothing when there is nothing to gain:
+         with unique keys the queue has to behave exactly like the heap, while a block with runs
+         of duplicates is where skipping to the end of a run pays off. -->
+    <create_query>CREATE TABLE replacing_insert_unique (k UInt64) ENGINE = ReplacingMergeTree ORDER BY k</create_query>
+    <create_query>CREATE TABLE replacing_insert_duplicates (k UInt64) ENGINE = ReplacingMergeTree ORDER BY k</create_query>
+    <create_query>SYSTEM STOP MERGES replacing_insert_unique</create_query>
+    <create_query>SYSTEM STOP MERGES replacing_insert_duplicates</create_query>
+
+    <query>INSERT INTO replacing_insert_unique SELECT number FROM numbers(20000000) SETTINGS max_threads = 1, max_insert_threads = 1</query>
+    <query>INSERT INTO replacing_insert_duplicates SELECT number DIV 10 FROM numbers(20000000) SETTINGS max_threads = 1, max_insert_threads = 1</query>
+
     <drop_query>DROP TABLE IF EXISTS replacing_cheap_key</drop_query>
     <drop_query>DROP TABLE IF EXISTS replacing_expensive_key</drop_query>
+    <drop_query>DROP TABLE IF EXISTS replacing_insert_unique</drop_query>
+    <drop_query>DROP TABLE IF EXISTS replacing_insert_duplicates</drop_query>
 </test>
