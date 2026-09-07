@@ -74,7 +74,10 @@ bool IMergingAlgorithmWithSharedChunks::sourcesHaveRunsWorthSkipping() const
         if (cursor.empty() || cursor.permutation || sources_origin_merge_tree_part_level[source_num] > 0)
             continue;
 
+        /// Three rows are needed for one of them to be strictly inside a run.
         size_t rows_to_check = std::min(cursor.getSize() / max_share_of_rows_to_check, max_rows_to_check);
+        if (rows_to_check < 3)
+            continue;
 
         /// A row is skippable when it is neither the first nor the last row of its run, that is
         /// when it is equal to both of its neighbours.
