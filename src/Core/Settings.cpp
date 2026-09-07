@@ -10066,6 +10066,14 @@ void Settings::dumpToSystemSettingsColumns(MutableColumnsAndConstraints & params
             CoreSettings::maskSettingValue(String(setting.getName()), value);
     };
 
+    /// For a constraint, whose raw `Field` is at hand: the value of a custom setting can be an AST
+    /// that no plain `Field` formatter hides.
+    const auto mask_field = [&](const auto & setting, const Field & field, String & value)
+    {
+        if (!show_secrets)
+            CoreSettings::maskSettingValue(String(setting.getName()), field, value);
+    };
+
     const auto fill_data_for_setting = [&](std::string_view setting_name, const auto & setting)
     {
         String value = setting.getValueString(show_secrets);
@@ -10092,13 +10100,13 @@ void Settings::dumpToSystemSettingsColumns(MutableColumnsAndConstraints & params
         if (!min.isNull())
         {
             String min_string = Settings::valueToStringUtil(setting_name, min);
-            mask(setting, min_string);
+            mask_field(setting, min, min_string);
             min = min_string;
         }
         if (!max.isNull())
         {
             String max_string = Settings::valueToStringUtil(setting_name, max);
-            mask(setting, max_string);
+            mask_field(setting, max, max_string);
             max = max_string;
         }
 
@@ -10106,7 +10114,7 @@ void Settings::dumpToSystemSettingsColumns(MutableColumnsAndConstraints & params
         for (const auto & disallowed_value : disallowed_values)
         {
             String disallowed_string = Settings::valueToStringUtil(setting_name, disallowed_value);
-            mask(setting, disallowed_string);
+            mask_field(setting, disallowed_value, disallowed_string);
             disallowed_array.emplace_back(disallowed_string);
         }
 
@@ -10115,7 +10123,9 @@ void Settings::dumpToSystemSettingsColumns(MutableColumnsAndConstraints & params
         res_columns[6]->insert(disallowed_array);
         res_columns[7]->insert(writability == SettingConstraintWritability::CONST);
         res_columns[8]->insert(setting.getTypeName());
-        res_columns[9]->insert(setting.getDefaultValueString());
+        String default_value = setting.getDefaultValueString(show_secrets);
+        mask(setting, default_value);
+        res_columns[9]->insert(default_value);
         res_columns[11]->insert(setting.getTier() == SettingsTierType::OBSOLETE);
         res_columns[12]->insert(setting.getTier());
     };

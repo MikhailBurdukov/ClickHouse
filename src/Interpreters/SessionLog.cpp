@@ -288,7 +288,7 @@ void SessionLog::addLoginSuccess(const UUID & auth_id,
         for (const auto & change : changes)
         {
             String value = Settings::valueToStringUtil(change.name, change.value);
-            CoreSettings::maskSettingValue(change.name, value);
+            CoreSettings::maskSettingValue(change.name, change.value, value);
             log_entry.settings.emplace_back(change.name, value);
         }
     });
