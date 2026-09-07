@@ -25,7 +25,7 @@ String quoteStringSingleQuoteWithSingleQuote(std::string_view x)
 String quoteStringPostgreSQL(std::string_view x)
 {
     WriteBufferFromOwnString wb;
-    writeQuotedStringPostgreSQLLiteral(x, wb);
+    writeQuotedStringPostgreSQLLossless(x, wb);
     return wb.str();
 }
 

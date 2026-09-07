@@ -8,8 +8,8 @@ namespace DB
 enum class LiteralEscapingStyle : uint8_t
 {
     Regular,         /// Escape backslashes with backslash (\\) and quotes with backslash (\')
-    PostgreSQL,      /// Emit a PostgreSQL `E'...'` escape-string constant, doubling both the quote ('') and
-                     /// the backslash (\\); safe regardless of the server's `standard_conforming_strings`.
+    PostgreSQL,      /// Escape quotes with quote (''); strings with backslashes or control characters use the escape string constant form E'...' so that every byte round-trips
+    SQLite,          /// Only escape quotes as (''); all other bytes (including \n, \r, \t) are embedded literally
 };
 
 }

@@ -105,15 +105,9 @@ void SerializationFixedString::serializeBinaryBulk(const IColumn & column, Write
 }
 
 
-void SerializationFixedString::deserializeBinaryBulk(IColumn & column, ReadBuffer & istr, size_t rows_offset, size_t limit, double /*avg_value_size_hint*/) const
+void SerializationFixedString::deserializeBinaryBulk(IColumn & column, ReadBuffer & istr, size_t limit, double /*avg_value_size_hint*/) const
 {
     ColumnFixedString::Chars & data = typeid_cast<ColumnFixedString &>(column).getChars();
-
-    size_t skipped_bytes = 0;
-
-    if (unlikely(__builtin_mul_overflow(rows_offset, n, &skipped_bytes)))
-        throw Exception(ErrorCodes::TOO_LARGE_STRING_SIZE, "Deserializing FixedString will lead to overflow");
-    istr.ignore(skipped_bytes);
 
     size_t initial_size = data.size();
     size_t max_bytes = 0;
@@ -246,9 +240,7 @@ void SerializationFixedString::serializeTextQuoted(const IColumn & column, size_
 {
     const char * pos = reinterpret_cast<const char *>(&assert_cast<const ColumnFixedString &>(column).getChars()[n * row_num]);
     const char * end = getEndWithOptionalTrim(pos, n, settings);
-    if (settings.values.escape_string_for_postgresql)
-        writeQuotedStringPostgreSQLLiteral({pos, static_cast<size_t>(end - pos)}, ostr);
-    else if (settings.values.escape_quote_with_quote)
+    if (settings.values.escape_quote_with_quote)
     {
         writeChar('\'', ostr);
         writeAnyEscapedString<'\'', true, false>(pos, end, ostr);

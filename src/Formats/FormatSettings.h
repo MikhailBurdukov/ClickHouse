@@ -48,6 +48,9 @@ struct FormatSettings
     String column_names_for_schema_inference{};
     String schema_inference_hints{};
 
+    /// Cap for power-of-two growth of the JSON column's internal String buffers while materializing (0 = unlimited).
+    size_t json_max_string_column_growth_step = 0;
+
     bool try_infer_integers = true;
     bool try_infer_dates = true;
     bool try_infer_datetimes = true;
@@ -196,8 +199,6 @@ struct FormatSettings
         ArrowCompression output_compression_method = ArrowCompression::NONE;
         bool output_date_as_uint16 = false;
         bool output_unsupported_types_as_binary = true;
-        bool input_use_native_reader = true;
-        bool output_use_native_writer = true;
     } arrow{};
 
     struct AvroSchemaRegistryTimeouts
@@ -270,7 +271,11 @@ struct FormatSettings
         char collection_items_delimiter = '\x02';
         char map_keys_delimiter = '\x03';
         bool allow_variable_number_of_columns = true;
+        char rows_delimiter = '\n';
         Names input_field_names;
+        /// Transient state used only by the HiveText output serialization to track the current
+        /// Hive separator nesting level (see getHiveTextDelimiter). Not a user-facing setting.
+        size_t nesting_level = 1;
     } hive_text{};
 
     struct Custom
@@ -320,6 +325,7 @@ struct FormatSettings
         bool empty_as_default = false;
         bool type_json_skip_invalid_typed_paths = false;
         bool type_json_skip_duplicated_paths = false;
+        bool type_json_skip_null_typed_paths = false;
         std::optional<size_t> max_dynamic_subcolumns_in_json_type_parsing = std::nullopt;
         bool type_json_allow_duplicated_key_with_literal_and_nested_object = false;
         bool type_json_use_partial_match_to_skip_paths_by_regexp = true;
@@ -330,6 +336,7 @@ struct FormatSettings
         bool write_map_as_array_of_tuples = false;
         bool read_map_as_array_of_tuples = false;
         bool json_type_escape_dots_in_keys = false;
+        size_t max_row_size_for_json_each_row = 0;
     } json{};
 
     struct
@@ -384,6 +391,7 @@ struct FormatSettings
         UInt64 row_group_bytes = 512 * 1024 * 1024;
         bool output_string_as_string = false;
         bool output_fixed_string_as_fixed_byte_array = true;
+        bool output_wide_integer_as_decimal = false;
         bool output_datetime_as_uint32 = false;
         bool output_date_as_uint16 = false;
         bool output_enum_as_byte_array = false;
@@ -399,6 +407,7 @@ struct FormatSettings
         double bloom_filter_bits_per_value = 10.5;
         size_t bloom_filter_flush_threshold_bytes = 1024 * 1024 * 128;
         bool allow_geoparquet_parser = true;
+        bool spatial_filter_push_down = true;
         bool write_geometadata = true;
         size_t max_dictionary_size = 1024 * 1024;
     } parquet{};
@@ -525,11 +534,6 @@ struct FormatSettings
         bool accurate_types_of_literals = true;
         bool allow_data_after_semicolon = false;
         bool escape_quote_with_quote = false;
-        /// Emit string literals as PostgreSQL `E'...'` escape-string constants (doubling both the
-        /// quote and the backslash), safe regardless of the server's `standard_conforming_strings`.
-        /// Used when building SQL sent to a PostgreSQL dictionary source; distinct from the plain
-        /// `''`-doubling `escape_quote_with_quote` used for Cassandra and the VALUES format.
-        bool escape_string_for_postgresql = false;
     } values{};
 
     enum class ORCCompression : uint8_t
@@ -600,6 +604,9 @@ struct FormatSettings
         UInt64 width = 1024;
         UInt64 height = 1024;
         String terminal_mode;
+        UInt64 time_multiplier_seconds = 1;
+        UInt64 time_divisor_seconds = 60;
+        bool streaming_animation = false;
     } image{};
 
     struct
