@@ -785,26 +785,35 @@ def test_stream_input_left_open_by_many_concurrent_clients():
     # other calls' events, so each call's thread destroys the call while the completion of its
     # speculative read is still queued - the interleaving needed for the use-after-free to fire.
     stub = clickhouse_grpc_pb2_grpc.ClickHouseStub(main_channel)
-    keep_open = Event()
 
-    def send_query_info():
-        yield clickhouse_grpc_pb2.QueryInfo(
-            query="SELECT 1", output_format="TabSeparated"
-        )
-        keep_open.wait()
+    def make_send_query_info(keep_open):
+        def send_query_info():
+            yield clickhouse_grpc_pb2.QueryInfo(
+                query="SELECT 1", output_format="TabSeparated"
+            )
+            keep_open.wait()
 
-    try:
-        for _ in range(10):
+        return send_query_info
+
+    for _ in range(10):
+        # A fresh event per batch, released at the end of the batch: otherwise the request
+        # generators of the earlier batches stay parked in `keep_open.wait()` while their calls are
+        # already finished on the server, so the later batches would only pile up blocked Python
+        # threads instead of keeping the server's completion queue busy with concurrent finishes.
+        keep_open = Event()
+        try:
             futures = [
-                stub.ExecuteQueryWithStreamInput.future(send_query_info())
+                stub.ExecuteQueryWithStreamInput.future(
+                    make_send_query_info(keep_open)()
+                )
                 for _ in range(16)
             ]
             for future in futures:
                 result = future.result(timeout=30)
                 assert not result.HasField("exception")
                 assert result.output == b"1\n"
-    finally:
-        keep_open.set()
+        finally:
+            keep_open.set()
 
     assert query("SELECT 3") == "3\n"
 
