@@ -438,8 +438,10 @@ void PostgreSQLHandler::run()
             switch (message_type)
             {
                 case PostgreSQLProtocol::Messaging::FrontMessageType::QUERY:
-                    /// A simple query is a complete protocol cycle.
+                    /// A simple query is a complete protocol cycle, and it also destroys the
+                    /// unnamed prepared statement and the unnamed portal.
                     in_extended_query_cycle = false;
+                    prepared_statements_manager.dropUnnamedStatementAndPortal();
                     processQuery();
                     need_ready_for_query = true;
                     message_transport->flush();
@@ -448,7 +450,7 @@ void PostgreSQLHandler::run()
                     LOG_DEBUG(log, "Client closed the connection");
                     return;
                 case PostgreSQLProtocol::Messaging::FrontMessageType::PARSE:
-                    /// Extended-query cycles end only at `Sync`.
+                    /// An extended-query cycle ends at its `Sync` or at a simple query.
                     in_extended_query_cycle = true;
                     processParseQuery();
                     message_transport->flush();

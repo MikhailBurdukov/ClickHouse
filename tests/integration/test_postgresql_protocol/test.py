@@ -1216,6 +1216,18 @@ def test_out_of_cycle_rejection_keeps_connection_usable(started_cluster):
 
     # `H` is `Flush`; `f` is `CopyFail`, a real message type this server does not accept.
     for label, message in (("Flush", _fe("H", b"")), ("CopyFail", _fe("f", b""))):
+        # A connection that has sent nothing yet has no cycle open either, so the very
+        # first message must be answered rather than starting the discard state. Every
+        # other case here opens and ends a cycle first, which would hide a handler that
+        # started out believing a cycle was already in progress.
+        sock, read_until_ready = _pg_raw_extended_query_session(node)
+        sock.sendall(message)
+        types = read_types(read_until_ready)
+        assert types == ["E", "Z"], (
+            f"{label} as the connection's first message must be answered, got {types}"
+        )
+        sock.close()
+
         sock, read_until_ready = _pg_raw_extended_query_session(node)
 
         # `Parse` opens an extended-query cycle and the simple query that follows ends it,
@@ -1237,6 +1249,68 @@ def test_out_of_cycle_rejection_keeps_connection_usable(started_cluster):
         types = read_types(read_until_ready)
         assert "C" in types, f"connection stopped answering after {label}, got {types}"
         sock.close()
+
+
+def test_simple_query_drops_unnamed_statement_and_portal(started_cluster):
+    # A simple `Query` destroys the unnamed prepared statement and the unnamed portal, so
+    # neither may stay executable across it, while named statements are untouched.
+    node = started_cluster.instances["node"]
+
+    def parse(stmt, query):
+        b = stmt.encode() + b"\x00" + query.encode() + b"\x00" + struct.pack("!H", 0)
+        return _fe("P", b)
+
+    def bind(stmt):
+        # The unnamed portal, no parameters and no explicit result formats.
+        return _fe("B", b"\x00" + stmt.encode() + b"\x00" + struct.pack("!HHH", 0, 0, 0))
+
+    def execute():
+        return _fe("E", b"\x00" + struct.pack("!I", 0))
+
+    sync = _fe("S", b"")
+    simple_query = _fe("Q", b"SELECT 222\x00")
+
+    # The portal: a `Bind` that completed before the simple query must not survive it.
+    sock, read_until_ready = _pg_raw_extended_query_session(node)
+    sock.sendall(parse("", "SELECT 111") + bind("") + simple_query)
+    types = read_until_ready()
+    assert types == ["1", "2", "T", "D", "C", "Z"], (
+        f"Parse, Bind and the simple query must all succeed first, got {types}"
+    )
+    sock.sendall(execute() + sync)
+    types = read_until_ready()
+    assert types == ["E", "Z"], (
+        f"Execute of the portal the simple query destroyed must fail, got {types}"
+    )
+    sock.close()
+
+    # The prepared statement: a later `Bind` has nothing left to resolve the name to.
+    sock, read_until_ready = _pg_raw_extended_query_session(node)
+    sock.sendall(parse("", "SELECT 111") + simple_query)
+    types = read_until_ready()
+    assert types == ["1", "T", "D", "C", "Z"], (
+        f"Parse and the simple query must both succeed first, got {types}"
+    )
+    sock.sendall(bind("") + sync)
+    types = read_until_ready()
+    assert types == ["E", "Z"], (
+        f"Bind on the statement the simple query destroyed must fail, got {types}"
+    )
+    sock.close()
+
+    # A named statement is not the unnamed one, so it must still bind and execute.
+    sock, read_until_ready = _pg_raw_extended_query_session(node)
+    sock.sendall(parse("st", "SELECT 333") + simple_query)
+    types = read_until_ready()
+    assert types == ["1", "T", "D", "C", "Z"], (
+        f"Parse of the named statement and the simple query must succeed, got {types}"
+    )
+    sock.sendall(bind("st") + execute() + sync)
+    types = read_until_ready()
+    assert types == ["2", "T", "D", "C", "Z"], (
+        f"a named statement must survive the simple query, got {types}"
+    )
+    sock.close()
 
 
 def test_bind_binary_result_format_accepted_as_text(started_cluster):
