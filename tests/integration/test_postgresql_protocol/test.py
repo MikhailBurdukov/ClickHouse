@@ -1178,6 +1178,16 @@ def test_flush_error_discards_until_sync(started_cluster):
     assert types.count("Z") == 1, (
         f"FLUSH pipeline must emit one ReadyForQuery per Sync, got {types}"
     )
+    # `Sync` ended the cycle, so this second `FLUSH` is out of cycle even though no simple
+    # query has run since. It must be answered at once, and a timeout here is the hang.
+    sock.sendall(flush())
+    try:
+        types = read_until_ready(timeout=15.0)
+    except socket.timeout:
+        types = ["<no ReadyForQuery, client left waiting>"]
+    assert types == ["E", "Z"], (
+        f"FLUSH after the cycle's Sync must be answered at once, got {types}"
+    )
     # A discarded `Execute` leaves nothing queued, so an empty query that answers with
     # `EmptyQueryResponse` alone is what distinguishes discarding from executing late.
     sock.sendall(_fe("Q", b"\x00"))
