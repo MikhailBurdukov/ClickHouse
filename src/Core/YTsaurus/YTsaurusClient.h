@@ -102,7 +102,7 @@ private:
     Poco::Dynamic::Var getMetadata(const String & path);
 
 
-    ReadBufferPtr createQueryRWBuffer(const URI& uri,  const ReadWriteBufferFromHTTP::OutStreamCallback& out_callback, const std::string & http_method);
+    ReadBufferPtr createQueryRWBuffer(const URI & uri, const ReadWriteBufferFromHTTP::OutStreamCallback & out_callback, const std::string & http_method);
     /// `request_throttler` (if set) is consumed once per actual HTTP attempt, i.e. also for every retry against
     /// another http proxy, so a configured requests-per-second limit holds under proxy failover as well.
     ReadBufferPtr executeQuery(

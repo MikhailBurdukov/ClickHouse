@@ -221,7 +221,7 @@ YTsaurusClient::URI YTsaurusClient::getHeavyProxyURI(const URI& uri)
 }
 
 
-ReadBufferPtr YTsaurusClient::createQueryRWBuffer(const URI& uri, const ReadWriteBufferFromHTTP::OutStreamCallback& out_callback, const std::string & http_method)
+ReadBufferPtr YTsaurusClient::createQueryRWBuffer(const URI & uri, const ReadWriteBufferFromHTTP::OutStreamCallback & out_callback, const std::string & http_method)
 {
     std::string output_params = fmt::format("<uuid_mode=text_yql;complex_type_mode=positional;encode_utf8={}>", connection_info.encode_utf8  ?  "true" : "false");
     HTTPHeaderEntries http_headers{
