@@ -1576,7 +1576,7 @@ def parse_args():
     parser.add_argument(
         "--interval",
         type=int,
-        default=20 * 60,
+        default=10 * 60,
         help="seconds between iteration starts",
     )
     parser.add_argument(
